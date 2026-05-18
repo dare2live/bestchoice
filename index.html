@@ -799,9 +799,9 @@ const METRIC_HELP = {
   history_status: { desc:'历史回测数据完整性', high:'历史有效：样本充足', low:'样本不足/无信号：数据不可信' },
   holder_chg:     { desc:'最近报告期股东户数环比变化', high:'正：筹码分散（散户涌入）', low:'负：筹码集中（可能主力控盘）' },
   best_holding_days:{ desc:'历史上Calmar最高的持仓天数', high:'越接近实际持仓期越好', low:'偏差大说明需要调整策略持仓期' },
-  trade_buy_price:{ desc:'最近一次金叉后下一交易日的前复权收盘买入参考价' },
+  trade_buy_price:{ desc:'最近一次金叉后下一交易日的前复权收盘买入参考价；若当天刚金叉则等待下一根K线确认' },
   trade_eval_price:{ desc:'按该股票最优持仓期对应的卖出价；若尚未到期，则为最新K线收盘价' },
-  trade_ref_ret:{ desc:'最近一次买点按该股票最优持仓期验证到目标卖出日或最新K线的收益率' },
+  trade_ref_ret:{ desc:'最近一次买点按该股票最优持仓期验证到目标卖出日或最新K线的收益率；待买入时暂不可计算' },
   trade_ref_holding_days:{ desc:'该股票历史Calmar最高的持仓周期，用于最近买点验证' },
 };
 
@@ -812,9 +812,9 @@ const TABLE_COLUMNS = [
   { key:'code',              label:'代码',    filterType:'text',          width:70, display:r=>`<span class="cell-code">${r.code}</span>` },
   { key:'name',              label:'名称',    filterType:'text',          width:100, display:r=>`<span class="cell-name">${r.name||''}</span>` },
   { key:'trade_ref_holding_days', label:'周期',filterType:'number',       width:58, display:r=>r.trade_ref_holding_days!=null?`${r.trade_ref_holding_days}天`:'—' },
-  { key:'trade_buy_price',   label:'买入价',  filterType:'number',        width:72, display:r=>r.trade_buy_price!=null?`¥${fmtNum(r.trade_buy_price,2,'—')}`:'—' },
-  { key:'trade_eval_price',  label:'卖/最新价',filterType:'number',       width:78, display:r=>r.trade_eval_price!=null?`¥${fmtNum(r.trade_eval_price,2,'—')}`:'—' },
-  { key:'trade_ref_ret',     label:'验证收益',filterType:'number', filterScale:100, width:78, display:r=>fmtSignedPct(r.trade_ref_ret,2,'—') },
+  { key:'trade_buy_price',   label:'买入价',  filterType:'number',        width:72, display:r=>renderBuyPriceCell(r) },
+  { key:'trade_eval_price',  label:'卖/最新价',filterType:'number',       width:78, display:r=>renderEvalPriceCell(r) },
+  { key:'trade_ref_ret',     label:'验证收益',filterType:'number', filterScale:100, width:78, display:r=>renderTradeRetCell(r) },
   { key:'win_rate',          label:'胜率',    filterType:'number', filterScale:100, width:76, display:r=>fmtPct(r.win_rate,2,'—') },
   { key:'avg_ret',           label:'均收益',  filterType:'number', filterScale:100, width:80, display:r=>fmtSignedPct(r.avg_ret,2,'—') },
   { key:'avg_dd',            label:'均回撤',  filterType:'number', filterScale:100, width:80, display:r=>fmtSignedPct(r.avg_dd,2,'—') },
@@ -901,6 +901,28 @@ function renderSellHintCell(r) {
   if (r.status === '刚金叉' && r.days_event != null) {
     return `<span style="font-size:11px;color:var(--red)">金叉${r.days_event}天</span>`;
   }
+  return '—';
+}
+
+function renderPendingTradeText(text) {
+  return `<span style="font-size:11px;color:var(--muted)">${text}</span>`;
+}
+
+function renderBuyPriceCell(r) {
+  if (r.trade_buy_price != null) return `¥${fmtNum(r.trade_buy_price,2,'—')}`;
+  if (r.trade_pending_buy) return renderPendingTradeText('待T+1');
+  return '—';
+}
+
+function renderEvalPriceCell(r) {
+  const price = r.trade_eval_price ?? r.trade_latest_price;
+  if (price != null) return `¥${fmtNum(price,2,'—')}`;
+  return '—';
+}
+
+function renderTradeRetCell(r) {
+  if (r.trade_ref_ret != null) return fmtSignedPct(r.trade_ref_ret,2,'—');
+  if (r.trade_pending_buy) return renderPendingTradeText('待买入');
   return '—';
 }
 
@@ -1262,12 +1284,14 @@ function fillDetail(row) {
 
   document.getElementById('d-action').textContent   = actionText;
   document.getElementById('d-best-hp').textContent  = row.best_holding_days!=null ? `${row.best_holding_days} 天` : '—';
-  document.getElementById('d-buy-price').textContent = row.trade_buy_price!=null ? `¥${Number(row.trade_buy_price).toFixed(2)}` : '—';
-  document.getElementById('d-exit-price').textContent = row.trade_eval_price!=null ? `¥${Number(row.trade_eval_price).toFixed(2)}` : '—';
-  document.getElementById('d-trade-ret').innerHTML = fmtSignedPct(row.trade_ref_ret,2,'—');
+  document.getElementById('d-buy-price').innerHTML = renderBuyPriceCell(row);
+  document.getElementById('d-exit-price').innerHTML = renderEvalPriceCell(row);
+  document.getElementById('d-trade-ret').innerHTML = renderTradeRetCell(row);
 
   let sellHintText = row.sell_hint || '—';
-  if (row.trade_buy_date && row.trade_eval_date) {
+  if (row.trade_pending_buy) {
+    sellHintText = `${row.trade_signal_date || row.last_gc_date || '最新交易日'}金叉，等待下一交易日收盘价确认买入参考价`;
+  } else if (row.trade_buy_date && row.trade_eval_date) {
     const mode = row.trade_reached_target ? '已到参考卖点' : `未到期，还需${row.trade_remaining_days ?? '-'}天`;
     sellHintText = `${row.trade_buy_date}买入，${row.trade_eval_date}验证，${mode}`;
   }
@@ -1386,10 +1410,10 @@ function setDataDateLabel(s) {
   const globalLatest = s.global_latest_data_date || latest;
   const count = s.global_latest_stock_count;
   if (globalLatest && globalLatest !== latest) {
-    el.textContent = `数据至 ${latest}（少量至 ${globalLatest}）`;
-    el.title = `覆盖率最新交易日：${latest}；全局最新日期 ${globalLatest} 只有 ${count ?? '-'} 只股票。`;
+    el.textContent = `覆盖至 ${latest} · ${count ?? '-'}只到 ${globalLatest}`;
+    el.title = `绝大多数股票的最新K线截至 ${latest}；只有 ${count ?? '-'} 只股票更新到 ${globalLatest}。模型计算按各股票自身最新K线执行。`;
   } else {
-    el.textContent = latest ? `数据至 ${latest}` : '';
+    el.textContent = latest ? `覆盖至 ${latest}` : '';
     el.title = '行情数据最新交易日';
   }
 }

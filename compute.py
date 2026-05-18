@@ -1159,8 +1159,24 @@ def compute_current(meta: dict[str, tuple], profile: dict[str, Any], formula_hit
                             "latest_price": round(float(cls[-1]), 3),
                             "elapsed_trading_days": 0,
                             "latest_ret": None,
+                            "pending_buy": True,
+                            "pending_reason": "waiting_next_bar",
                         }
                     )
+                    for hp0 in HOLDING_PERIODS:
+                        latest_trade_horizons[hp0] = {
+                            "holding_days": hp0,
+                            "target_sell_date": None,
+                            "target_sell_price": None,
+                            "eval_date": str(date_arr[-1]),
+                            "eval_price": round(float(cls[-1]), 3),
+                            "ret": None,
+                            "max_dd": None,
+                            "reached_target": False,
+                            "remaining_days": hp0,
+                            "pending_buy": True,
+                            "pending_reason": "waiting_next_bar",
+                        }
                 break
 
         hits = formula_hits.get(code, {"f1_hit": False, "f3_hit": False, "f5_hit": False})
@@ -1599,6 +1615,8 @@ class ComputeEngine:
                 row["trade_latest_price"] = latest_trade.get("latest_price")
                 row["trade_elapsed_days"] = latest_trade.get("elapsed_trading_days")
                 row["trade_latest_ret"] = latest_trade.get("latest_ret")
+                row["trade_pending_buy"] = bool(latest_trade.get("pending_buy"))
+                row["trade_pending_reason"] = latest_trade.get("pending_reason")
                 row["trade_target_sell_date"] = ref_trade.get("target_sell_date")
                 row["trade_target_sell_price"] = ref_trade.get("target_sell_price")
                 row["trade_eval_date"] = ref_trade.get("eval_date")
