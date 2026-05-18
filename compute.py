@@ -1151,6 +1151,7 @@ def compute_current(meta: dict[str, tuple], profile: dict[str, Any], formula_hit
                             "remaining_days": max(0, target_i - latest_i),
                         }
                 else:
+                    sell_hint = "等待下一交易日确认买入"
                     latest_trade_base.update(
                         {
                             "buy_date": None,

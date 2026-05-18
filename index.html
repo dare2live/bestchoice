@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <style>
 :root {
   --bg: #f7f6f3;
@@ -67,10 +68,10 @@ body {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   padding: 0 18px;
-  height: 56px;
+  height: 46px;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
   z-index: 20;
 }
 #topbar h1 { margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap; }
@@ -84,21 +85,24 @@ body {
 #topbar .gap { flex: 1; }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand-mark {
-  width: 28px; height: 28px;
+  width: 24px; height: 24px;
   display: grid; place-items: center;
   background: var(--text);
   color: var(--surface);
-  font: 700 14px/1 "JetBrains Mono", "SF Mono", "Roboto Mono", "Menlo", monospace;
-  border-radius: 7px;
+  font: 700 12px/1 "JetBrains Mono", "SF Mono", "Roboto Mono", "Menlo", monospace;
+  border-radius: 6px;
 }
-.brand-text { line-height: 1.1; }
+.brand-text { line-height: 1.1; display: flex; align-items: baseline; gap: 8px; }
 .brand-name { font-weight: 700; font-size: 14px; }
-.brand-sub { margin-top: 2px; font-size: 11px; color: var(--muted); }
+.brand-sub { font-size: 11px; color: var(--muted); }
 #strategy-select { display: none; }
 .strategy-bar {
   flex-shrink: 0;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 8px 12px 0;
+  overflow: hidden;
 }
 .strategy-tabs {
   display: flex;
@@ -113,57 +117,71 @@ body {
   border-right: 1px solid var(--border);
   background: transparent;
   color: var(--muted);
-  flex: 1 1 120px;
-  min-width: 118px;
-  padding: 10px 12px 9px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 12px 7px;
   cursor: pointer;
-  text-align: center;
+  text-align: left;
   white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  transition: background .12s, color .12s;
 }
 .strategy-tab:hover { background: var(--surface-hover); color: var(--text); }
 .strategy-tab.active {
-  color: var(--text);
-  background: var(--surface);
-  box-shadow: inset 0 -2px 0 var(--text);
+  background: var(--accent-bg);
+  color: var(--accent);
+  box-shadow: none;
+}
+.strategy-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 2px;
+  background: var(--accent);
 }
 .strategy-tab-name {
-  display: block;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .strategy-tab-param {
-  display: block;
-  margin-top: 3px;
   color: var(--muted);
-  font: 500 11px/1.2 "JetBrains Mono", "SF Mono", "Roboto Mono", "Menlo", monospace;
+  font: 500 10.5px/1.3 "JetBrains Mono", "SF Mono", "Roboto Mono", "Menlo", monospace;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.strategy-tab.active .strategy-tab-name { color: var(--accent); }
 .strategy-tab.active .strategy-tab-param { color: var(--ink-2); }
 .strategy-param-strip {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
+  gap: 6px;
+  padding: 6px 16px;
   background: var(--surface-2);
   border-top: 1px solid var(--border);
   overflow-x: auto;
+  scrollbar-width: none;
 }
+.strategy-param-strip::-webkit-scrollbar { display: none; }
 .param-chip {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--ink-2);
-  padding: 5px 10px;
-  font: 600 12px/1.2 "JetBrains Mono", "SF Mono", "Roboto Mono", "Menlo", monospace;
+  padding: 3px 8px;
+  font: 600 11px/1.3 "JetBrains Mono", "SF Mono", "Roboto Mono", "Menlo", monospace;
   white-space: nowrap;
 }
 .param-source {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11.5px;
   white-space: nowrap;
 }
 .param-toggle {
@@ -172,8 +190,8 @@ body {
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--accent);
-  padding: 6px 10px;
-  font: 700 13px/1.2 inherit;
+  padding: 3px 9px;
+  font: 600 11.5px/1.3 inherit;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -225,28 +243,34 @@ body {
   gap: 0;
   padding: 0;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 8px 12px 0;
+  width: auto;
   min-width: 0;
+  overflow: hidden;
 }
 .card {
   border: 0;
   border-right: 1px solid var(--border);
   border-radius: 0;
-  padding: 10px 14px 11px;
+  padding: 7px 14px 8px;
   background: transparent;
   box-shadow: none;
   min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
 }
-.card-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
-.card-value { margin-top: 2px; font-size: 22px; line-height: 1.1; font-weight: 700; }
+.card-label { color: var(--muted); font-size: 11px; letter-spacing: .02em; flex-shrink: 0; }
+.card-value { font-size: 19px; line-height: 1.1; font-weight: 700; letter-spacing: -0.01em; }
 .card-sub {
-  margin-top: 4px;
   color: var(--muted);
   font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-left: auto;
 }
 .c-green  .card-value { color: var(--red); }
 .c-yellow .card-value { color: var(--yellow); }
@@ -261,7 +285,7 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 0;
-  padding: 12px 16px 16px;
+  padding: 8px 12px 12px;
   min-height: 0;
 }
 
@@ -319,8 +343,8 @@ body {
   flex-shrink: 0;
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: 6px;
+  padding: 7px 12px;
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
   background: var(--surface-2);
@@ -411,8 +435,33 @@ td:nth-child(n+5),
 .badge-gold   { background: var(--gold-bg);    color: var(--gold); }
 .num-pos { color: var(--red); }
 .num-neg { color: var(--green); }
-.cell-code { font-weight: 700; }
-.cell-name { color: var(--muted); font-size: 12px; }
+.cell-code {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px solid #c8d8f3;
+  color: #2d6cdf;
+  background: var(--surface);
+  border-radius: 999px;
+  font: 700 11.5px/1.45 "JetBrains Mono", "SF Mono", "Roboto Mono", "Menlo", monospace;
+  letter-spacing: 0;
+  text-overflow: clip;
+  overflow: visible;
+  transition: background .1s, border-color .1s;
+}
+a.cell-code,
+a.dh-code {
+  text-decoration: none;
+}
+/* The pill is a single inline node — don't let the TD inject a fallback ellipsis */
+tbody td:has(> .cell-code) { text-overflow: clip; }
+tbody tr:hover .cell-code { background: #eaf1fc; border-color: #2d6cdf; }
+tbody tr.selected .cell-code {
+  background: linear-gradient(180deg, #2d6cdf 0%, #1f5dca 100%);
+  border-color: #1f5dca;
+  color: #ffffff;
+}
+.cell-name { color: var(--text); font-size: 12.5px; font-weight: 500; }
 
 .quick-filters {
   display: flex;
@@ -425,88 +474,482 @@ td:nth-child(n+5),
   background: var(--surface);
   color: var(--ink-2);
   border-radius: 999px;
-  padding: 5px 10px;
+  padding: 5px 11px;
   cursor: pointer;
   font: 600 12px/1.2 inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background .12s, border-color .12s, color .12s;
 }
 .quick-chip:hover { background: var(--surface-hover); color: var(--text); }
-.quick-chip.active {
-  border-color: var(--accent-border);
-  background: var(--blue-bg);
-  color: var(--blue);
+.quick-chip .chip-count {
+  font: 700 11px/1 "JetBrains Mono", monospace;
+  letter-spacing: 0;
+  color: var(--c, var(--muted));
+  background: var(--cb, var(--gray-bg));
+  padding: 2px 6px;
+  border-radius: 999px;
+  min-width: 18px;
+  text-align: center;
 }
-.chip-count {
-  margin-left: 5px;
-  color: var(--muted);
-  font-weight: 600;
+.quick-chip.active {
+  background: var(--cb, var(--blue-bg));
+  border-color: var(--c, var(--accent-border));
+  color: var(--c, var(--blue));
+}
+.quick-chip.active .chip-count {
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--c, var(--blue));
 }
 
+/* Status-aware tints per filter chip — matches the badges in the table */
+.quick-chip[data-qf="all"]       { --c: var(--ink-2); --cb: var(--gray-bg); }
+.quick-chip[data-qf="candidate"] { --c: var(--red);   --cb: var(--red-bg); }
+.quick-chip[data-qf="strong"]    { --c: var(--gold);  --cb: var(--gold-bg); }
+.quick-chip[data-qf="just"]      { --c: var(--red);   --cb: var(--red-bg); }
+.quick-chip[data-qf="near"]      { --c: var(--yellow);--cb: var(--yellow-bg); }
+.quick-chip[data-qf="holding"]   { --c: var(--blue);  --cb: var(--blue-bg); }
+.quick-chip[data-qf="death"]     { --c: var(--green); --cb: var(--green-bg); }
+.quick-chip[data-qf="wait"]      { --c: var(--muted); --cb: var(--gray-bg); }
+.quick-chip[data-qf="history"]   { --c: var(--ink-2); --cb: var(--gray-bg); }
+
 /* ── Horizon table ───────────────────────────────── */
+/* ── Horizon table ───────────────────── */
 .horizon-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 11.5px;
+  background: var(--surface);
 }
 .horizon-table th {
-  background: var(--surface-2);
+  background: transparent;
   color: var(--muted);
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: .03em;
-  padding: 5px 8px;
+  letter-spacing: .04em;
+  padding: 4px 8px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
   font-weight: 600;
+  text-align: left;
 }
 .horizon-table td {
   padding: 5px 8px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+  color: var(--ink-2);
+  font-family: "JetBrains Mono", "SF Mono", "Roboto Mono", "Menlo", monospace;
+  font-feature-settings: "tnum";
+  background: transparent;  /* let tr bg show through for the best-row highlight */
 }
-.horizon-table tr.best-row td { background: var(--warn-soft, #fbf3df); font-weight: 700; }
-.horizon-table tr.best-row td:first-child::after { content: ' ★'; color: var(--gold); font-size: 11px; }
+.horizon-table tr:last-child td { border-bottom: none; }
+.horizon-table tr.best-row {
+  background: var(--warn-soft);
+}
+.horizon-table tr.best-row td {
+  color: var(--text);
+  font-weight: 700;
+}
+/* Elegant accent stripe replacing the ★ marker */
+.horizon-table tr.best-row td:first-child {
+  position: relative;
+  padding-left: 14px;
+}
+.horizon-table tr.best-row td:first-child::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--gold);
+  border-radius: 2px;
+}
+.horizon-table tr.best-row td:first-child::after { content: none; }
 
-/* ── Inline detail panel ─────────────────────────── */
-.detail-template-host { display: none; }
-.detail-row:hover { background: transparent; }
-.detail-cell {
-  height: auto;
-  padding: 0 10px 12px;
-  border-bottom: 1px solid var(--border);
-  overflow: visible;
-  white-space: normal;
-}
-.inline-detail-card {
-  border: 1px solid var(--accent-border);
-  border-radius: var(--radius);
+/* ── Detail drawer (slides in from right) ───────────────── */
+.detail-template-host {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(620px, 48vw);
   background: var(--surface);
-  padding: 12px;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
-  gap: 10px;
-  align-items: start;
-  box-shadow: 0 4px 16px rgba(20,18,14,.05);
-}
-.inline-detail-card #rec-box {
-  grid-column: span 1;
-  margin-bottom: 0;
-}
-.inline-detail-card #rec-title { font-size: 13px; }
-.inline-detail-card #rec-desc {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
+  border-left: 1px solid var(--border);
+  box-shadow: -12px 0 32px rgba(20, 18, 14, 0.08);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform .26s cubic-bezier(.32, .72, .42, 1);
   overflow: hidden;
 }
-.inline-detail-card .d-section { margin-bottom: 0; min-width: 0; }
-.inline-detail-card #charts {
+.detail-template-host.open { transform: translateX(0); }
+.detail-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 18, 14, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+  z-index: 39;
+}
+.detail-backdrop.open { opacity: 1; pointer-events: auto; }
+.rpanel-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+/* Cleared: no more inline-row injection */
+.detail-row, .detail-cell, .inline-detail-card { all: unset; display: contents; }
+
+/* ── Detail header bar (sticky drawer top) ──────────────── */
+.detail-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+}
+.dh-id { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+/* Xueqiu-style blue capsule wrapping the stock code */
+.dh-code {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 11px;
+  background: linear-gradient(180deg, #2d6cdf 0%, #1f5dca 100%);
+  color: #ffffff;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 0 1px 0 rgba(255,255,255,.18) inset, 0 1px 2px rgba(31, 93, 202, .25);
+}
+.dh-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.dh-status .badge { font-size: 11px; padding: 2px 8px; }
+.dh-meta {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  flex: 1 1 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  order: 3;
+}
+.dh-dot { color: var(--mute-soft); }
+.dh-price {
+  display: flex; flex-direction: column; align-items: flex-end;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.dh-price-val { font-size: 19px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; line-height: 1.1; }
+.dh-price-meta { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+.dh-price-meta em { font-style: normal; color: var(--ink-2); font-weight: 600; }
+.dh-close {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font: 400 18px/1 "JetBrains Mono", monospace;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.dh-close:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border-strong); }
+
+/* ── Action row (stacked in drawer) ───────────────────── */
+.detail-action-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.detail-action-row #rec-box {
+  margin-bottom: 0;
+  padding: 10px 12px;
+}
+.detail-action-row #rec-title { font-size: 13px; }
+.detail-action-row #rec-desc {
+  line-height: 1.5;
+  font-size: 11.5px;
+  margin-top: 4px;
+}
+
+/* Execution plan: buy → sell timeline, promoted to the top of the report */
+.exec-plan {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  flex-wrap: wrap;
+}
+.exec-plan[hidden] { display: none; }
+.ep-step {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ep-label {
+  font-size: 10.5px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+.ep-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ep-arrow {
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.ep-state {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  white-space: nowrap;
+}
+.ep-state.is-done { background: var(--green-bg); color: var(--green); border-color: #c7e6d6; }
+.ep-state.is-pending { background: var(--yellow-bg); color: var(--yellow); border-color: #ebd7a5; }
+.ep-state.is-wait { background: var(--gray-bg); color: var(--muted); border-color: var(--border); }
+
+.action-cells {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.action-cell {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 7px 10px;
+  min-width: 0;
+}
+.ac-label {
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ac-val {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.005em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.action-cell-score { grid-column: span 1; }
+.action-cell-score .ac-val { font-size: 14px; }
+
+/* ── Detail body (single-column report flow) ─────────────── */
+.detail-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+.db-left, .db-right {
+  display: contents;
+}
+.detail-body .d-section {
+  margin-bottom: 0;
+  padding: 12px 16px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.detail-body .d-section:last-child { border-bottom: none; }
+
+/* Section title with accent bar ─ stronger 区分度 */
+.detail-body .d-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 0;
+  border-bottom: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.detail-body .d-section-title::before {
+  content: '';
+  width: 3px;
+  height: 13px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+.detail-body .d-section.section-warn .d-section-title::before { background: var(--yellow); }
+.detail-body .d-section.section-history .d-section-title::before { background: var(--red); }
+.detail-body .d-section.section-hint .d-section-title::before { background: var(--gold); }
+
+/* Report-style metric rows ─ 3 columns, hairline divided, dense */
+.detail-body .d-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.detail-body .d-cell {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  min-width: 0;
+}
+.detail-body .d-cell-label {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.3;
+  flex: 0 0 auto;
+}
+.detail-body .d-cell-label[title] {
+  text-decoration: underline dotted var(--border);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.detail-body .d-cell-value {
+  margin-top: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.detail-body .d-cell-wide {
   grid-column: 1 / -1;
+}
+.detail-body .d-sell-hint-cell {
   display: block;
+  padding: 10px 12px;
+  background: var(--gold-bg);
+  border: 1px solid var(--gold-bg);
+  border-radius: var(--radius-sm);
 }
-.inline-detail-card .d-grid,
-.inline-detail-card .timing-grid {
-  grid-template-columns: repeat(2, minmax(120px, 1fr));
+.detail-body .d-sell-hint-cell .d-cell-value {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  line-height: 1.55;
+  text-align: left;
+  white-space: normal;
 }
+.d-cell-wide { grid-column: 1 / -1; }
+
+/* ── Chart panel ─────────────────────────── */
+.chart-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+.chart-panel + .chart-panel { border-top: none; border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+.chart-panel:has(+ .chart-panel) { border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+.chart-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+  gap: 8px;
+}
+.chart-panel-title { font-weight: 600; color: var(--ink-2); letter-spacing: 0.02em; white-space: nowrap; }
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.chart-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.chart-legend i {
+  width: 11px;
+  height: 2px;
+  border-radius: 1px;
+  display: inline-block;
+}
+.chart-legend i.bar { height: 7px; width: 7px; border-radius: 1.5px; }
+.chart-legend i.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  background: var(--surface);
+}
+/* CSS-drawn directional arrows for golden / death cross markers */
+.chart-legend i.arrow-up,
+.chart-legend i.arrow-down {
+  width: 0;
+  height: 0;
+  border-radius: 0;
+  background: transparent;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+}
+.chart-legend i.arrow-up { border-bottom: 6px solid currentColor; }
+.chart-legend i.arrow-down { border-top: 6px solid currentColor; }
+.chart-canvas-wrap { padding: 2px 6px 4px; }
+
+/* MACD chart sizing inside drawer */
+.detail-body #chart-price { height: 168px !important; }
+.detail-body #chart-macd { height: 138px !important; }
 
 /* ── Param cards ─────────────────────────────────── */
 .param-card {
@@ -563,54 +1006,31 @@ td:nth-child(n+5),
 .score-bar-bg { height: 5px; border-radius: 3px; background: var(--bg); margin-top: 4px; }
 .score-bar-fill { height: 5px; border-radius: 3px; background: var(--red); transition: width .3s; }
 
-.chart-stack {
+/* Formula chips */
+.fchip {
+  display: inline-block;
+  padding: 1px 7px;
+  margin-right: 4px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: linear-gradient(180deg, var(--surface), var(--surface-2));
-  padding: 10px 12px 8px;
-  overflow: hidden;
+  border-radius: 4px;
+  font: 600 11px "JetBrains Mono", monospace;
+  color: var(--mute-soft);
+  background: var(--surface);
 }
-.chart-host {
-  width: 100%;
-  height: 320px;
+.fchip.fchip-on {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
 }
-.macd-combo-chart {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-.chart-grid-line {
-  stroke: var(--border);
-  stroke-width: .7;
-  shape-rendering: crispEdges;
-}
-.chart-legend {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  margin-top: 4px;
+.fchip-count {
+  margin-left: 4px;
   color: var(--muted);
-  font-size: 11.5px;
-  line-height: 1.2;
+  font-size: 11px;
+  font-weight: 600;
 }
-.chart-legend > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-.legend-line {
-  width: 18px;
-  height: 2px;
-  border-radius: 2px;
-  display: inline-block;
-}
-.legend-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  display: inline-block;
-}
+
+#chart-price, #chart-macd { width: 100%; height: 170px !important; }
+#chart-wrap-macd { margin-top: 0; }
 
 /* ── Loading overlay ─────────────────────────────── */
 #loading {
@@ -628,24 +1048,6 @@ td:nth-child(n+5),
 #load-msg { color: var(--muted); font-size: 13px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Responsive ──────────────────────────────────── */
-@media (max-width: 1300px) {
-  .param-detail-grid { grid-template-columns: repeat(2, 1fr); }
-  .inline-detail-card { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
-}
-@media (max-width: 1100px) {
-  .cards-row   { grid-template-columns: repeat(4, 1fr); }
-  .param-detail-grid { grid-template-columns: 1fr; }
-  .inline-detail-card { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
-}
-@media (max-width: 900px) {
-  .cards-row   { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .main-layout { padding: 8px 10px; }
-  .inline-detail-card { grid-template-columns: 1fr; }
-  .inline-detail-card #rec-box { grid-column: 1; }
-  .chart-host { height: 280px; }
-  .chart-legend { flex-wrap: wrap; gap: 10px 14px; }
-}
 </style>
 </head>
 <body>
@@ -749,128 +1151,150 @@ td:nth-child(n+5),
     </div>
   </div>
 
-  <!-- Inline detail template; moved into the selected table row on demand -->
+  <!-- Stock detail drawer + backdrop -->
+  <div id="detail-backdrop" class="detail-backdrop" onclick="collapseDetail(false)"></div>
   <div id="detail-template-host" class="detail-template-host">
-    <!-- Detail content -->
     <div id="rpanel-detail" class="rpanel-content">
 
-      <!-- Recommendation box -->
-      <div id="rec-box" class="rec-wait">
-        <div id="rec-title"></div>
-        <div id="rec-desc"></div>
+      <!-- Header bar: identity + price + close -->
+      <div class="detail-head">
+        <div class="dh-id">
+          <a class="dh-code mono" id="d-code" href="#" target="_blank" rel="noopener" onclick="event.stopPropagation()">—</a>
+          <span class="dh-name" id="d-name">—</span>
+          <span class="dh-status" id="d-status">—</span>
+        </div>
+        <div class="dh-meta">
+          <span id="d-ind">—</span>
+          <span class="dh-dot">·</span>
+          <span id="d-type">—</span>
+          <span class="dh-dot">·</span>
+          <span title="最近一次DIF上穿DEA（金叉）的日期">最近金叉 <span class="mono" id="d-lgc">—</span></span>
+        </div>
+        <div class="dh-price">
+          <span class="dh-price-val mono" id="d-close">—</span>
+          <span class="dh-price-meta mono">DIF <em id="d-dif">—</em> · DEA <em id="d-dea">—</em></span>
+        </div>
+        <button class="dh-close" onclick="collapseDetail(false)" title="收起 (Esc)" aria-label="收起">×</button>
       </div>
 
-      <!-- 买卖时机 -->
-      <div class="d-section">
-        <div class="d-section-title">买卖时机</div>
-        <div class="timing-grid">
-          <div class="timing-cell">
-            <div class="timing-label">当前操作</div>
-            <div class="timing-value" id="d-action">—</div>
+      <!-- Action row: recommendation + plan + action cells -->
+      <div class="detail-action-row">
+        <div id="rec-box" class="rec-wait">
+          <div id="rec-title"></div>
+          <div id="rec-desc"></div>
+        </div>
+        <!-- Execution plan (timeline) — promoted to top so user sees what to do, when -->
+        <div id="exec-plan" class="exec-plan" hidden>
+          <div class="ep-step">
+            <div class="ep-label">买入参考</div>
+            <div class="ep-value"><span class="mono" id="ep-buy-date">—</span> · <span class="mono" id="ep-buy-price">—</span></div>
           </div>
-          <div class="timing-cell">
-            <div class="timing-label">最优持仓期</div>
-            <div class="timing-value" id="d-best-hp">—</div>
+          <div class="ep-arrow">→</div>
+          <div class="ep-step">
+            <div class="ep-label" id="ep-sell-label">参考卖出</div>
+            <div class="ep-value"><span class="mono" id="ep-sell-date">—</span> · <span class="mono" id="ep-sell-price">—</span></div>
           </div>
-          <div class="timing-cell">
-            <div class="timing-label">买入价</div>
-            <div class="timing-value" id="d-buy-price">—</div>
+          <div class="ep-state" id="ep-state">—</div>
+        </div>
+        <div class="action-cells">
+          <div class="action-cell">
+            <div class="ac-label">当前操作</div>
+            <div class="ac-val" id="d-action">—</div>
           </div>
-          <div class="timing-cell">
-            <div class="timing-label">参考卖出/最新价</div>
-            <div class="timing-value" id="d-exit-price">—</div>
+          <div class="action-cell">
+            <div class="ac-label" title="历史上Calmar最高的持仓天数">最优持仓</div>
+            <div class="ac-val mono" id="d-best-hp">—</div>
           </div>
-          <div class="timing-cell">
-            <div class="timing-label">最新验证收益</div>
-            <div class="timing-value" id="d-trade-ret">—</div>
+          <div class="action-cell">
+            <div class="ac-label">买入价</div>
+            <div class="ac-val mono" id="d-buy-price">—</div>
           </div>
-          <div class="timing-cell">
-            <div class="timing-label">卖出建议</div>
-            <div class="timing-value" id="d-sell-hint">—</div>
+          <div class="action-cell">
+            <div class="ac-label">卖出 / 最新</div>
+            <div class="ac-val mono" id="d-exit-price">—</div>
           </div>
-          <div class="timing-cell">
-            <div class="timing-label">综合评分</div>
-            <div class="timing-value" id="d-score">—</div>
-            <div class="score-bar-wrap">
-              <div class="score-bar-bg"><div class="score-bar-fill" id="d-score-bar" style="width:0%"></div></div>
+          <div class="action-cell">
+            <div class="ac-label">验证收益</div>
+            <div class="ac-val" id="d-trade-ret">—</div>
+          </div>
+          <div class="action-cell action-cell-score">
+            <div class="ac-label">综合评分</div>
+            <div class="ac-val mono" id="d-score">—</div>
+            <div class="score-bar-bg"><div class="score-bar-fill" id="d-score-bar" style="width:0%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Body: report flow, ordered by user concern (top → bottom) -->
+      <div class="detail-body">
+        <!-- 1. Visual confirmation — 价格走势 -->
+        <div class="d-section" id="charts">
+          <div class="chart-panel">
+            <div class="chart-panel-head">
+              <span class="chart-panel-title">价格走势 · 近 90 日</span>
+              <span class="chart-legend">
+                <span style="color:#2d6cdf"><i style="background:#2d6cdf"></i>收盘价</span>
+                <span style="color:#c4302b"><i class="arrow-up"></i>金叉</span>
+                <span style="color:#1f9e6e"><i class="arrow-down"></i>死叉</span>
+              </span>
             </div>
+            <div class="chart-canvas-wrap" id="chart-wrap-price"><canvas id="chart-price"></canvas></div>
+          </div>
+          <div class="chart-panel" style="margin-top:-1px">
+            <div class="chart-panel-head">
+              <span class="chart-panel-title">MACD · DIF / DEA</span>
+              <span class="chart-legend">
+                <span style="color:#b07d10"><i style="background:#b07d10"></i>DIF</span>
+                <span style="color:#2d6cdf"><i style="background:#2d6cdf"></i>DEA</span>
+                <span style="color:#c4302b"><i class="bar" style="background:#c4302b"></i>柱状图</span>
+              </span>
+            </div>
+            <div class="chart-canvas-wrap" id="chart-wrap-macd"><canvas id="chart-macd"></canvas></div>
           </div>
         </div>
-      </div>
 
-      <!-- 持仓期分析 -->
-      <div class="d-section">
-        <div class="d-section-title">持仓期分析</div>
-        <table class="horizon-table">
-          <thead>
-            <tr>
-              <th>持股天</th>
-              <th>胜率</th>
-              <th>均收益</th>
-              <th>均回撤</th>
-              <th>Calmar</th>
-              <th>样本数</th>
-            </tr>
-          </thead>
-          <tbody id="d-horizons-body">
-            <tr><td colspan="6" style="color:var(--muted);text-align:center">请选择股票</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- 当前状态 -->
-      <div class="d-section">
-        <div class="d-section-title">当前状态</div>
-        <div class="d-grid">
-          <div class="d-cell"><div class="d-cell-label">代码 / 名称</div><div class="d-cell-value" id="d-code">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="刚金叉=最强信号 | 即将金叉=提前布局 | 持仓期=继续持有 | 刚死叉=风险上升 | 等待=无近期信号">状态</div><div class="d-cell-value" id="d-status">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="DIF=快EMA-慢EMA。正=零轴上方（多头趋势）；金叉时DIF由下穿上DEA">DIF</div><div class="d-cell-value" id="d-dif">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="DEA=DIF的EMA信号线。DIF上穿DEA为金叉，下穿为死叉">DEA</div><div class="d-cell-value" id="d-dea">—</div></div>
-          <div class="d-cell"><div class="d-cell-label">收盘价</div><div class="d-cell-value" id="d-close">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="DIF当前值：正=零轴上方（多头，金叉更可信）；负=零轴下方（超跌反弹型）">DIF 距零轴</div><div class="d-cell-value" id="d-gap">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="当日成交额/近20日均额。>1.5：量能放大，金叉共振有效；<0.8：缩量，可信度偏弱">额比</div><div class="d-cell-value" id="d-amtr">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="当前收盘/近60日最高价。<40%：低位安全边际高；>80%：接近高点追高风险大">价格位置</div><div class="d-cell-value" id="d-price60">—</div></div>
+        <!-- 2. Why now — 当前指标 -->
+        <div class="d-section">
+          <div class="d-section-title">当前指标</div>
+          <div class="d-grid">
+            <div class="d-cell"><div class="d-cell-label" title="DIF当前值：正=零轴上方（多头，金叉更可信）；负=零轴下方（超跌反弹型）">DIF 距零轴</div><div class="d-cell-value mono" id="d-gap">—</div></div>
+            <div class="d-cell"><div class="d-cell-label" title="当日成交额/近20日均额。>1.5：量能放大；<0.8：缩量">额比 (20日)</div><div class="d-cell-value mono" id="d-amtr">—</div></div>
+            <div class="d-cell"><div class="d-cell-label" title="当前收盘/近60日最高价。<40%：低位安全边际高；>80%：追高风险大">价格位置 (60日)</div><div class="d-cell-value mono" id="d-price60">—</div></div>
+            <div class="d-cell"><div class="d-cell-label" title="最近报告期股东户数环比。负=筹码集中；正=筹码分散">股东变化</div><div class="d-cell-value mono" id="d-hchg">—</div></div>
+            <div class="d-cell d-cell-wide"><div class="d-cell-label" title="同时命中F1/F3/F5数量（0-3）。3=三公式共振最强">公式命中</div><div class="d-cell-value" id="d-formulas">—</div></div>
+          </div>
         </div>
-      </div>
 
-      <!-- 标的信息 -->
-      <div class="d-section">
-        <div class="d-section-title">标的信息</div>
-        <div class="d-grid">
-          <div class="d-cell"><div class="d-cell-label">行业</div><div class="d-cell-value" id="d-ind">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="市值风格：大/中/小盘 + 成长/价值/均衡">风格</div><div class="d-cell-value" id="d-type">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="最近报告期股东户数环比。负=筹码集中（可能主力控盘）；正=筹码分散">股东变化</div><div class="d-cell-value" id="d-hchg">—</div></div>
-          <div class="d-cell"><div class="d-cell-label">最近金叉</div><div class="d-cell-value" id="d-lgc">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="F1：量价综合选股（短期放量突破形态）">F1 命中</div><div class="d-cell-value" id="d-f1">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="F3：价值低位选股（低价位+低估值形态）">F3 命中</div><div class="d-cell-value" id="d-f3">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="F5：趋势加速选股（均线多头排列+量能加速）">F5 命中</div><div class="d-cell-value" id="d-f5">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="同时命中F1/F3/F5数量（0-3）。3=三公式共振最强">命中数</div><div class="d-cell-value" id="d-hitcnt">—</div></div>
+        <!-- 3. Which holding period — 持仓期分析 -->
+        <div class="d-section section-warn">
+          <div class="d-section-title">持仓期分析</div>
+          <table class="horizon-table">
+            <thead>
+              <tr>
+                <th>持股天</th>
+                <th>胜率</th>
+                <th>均收益</th>
+                <th>均回撤</th>
+                <th>Calmar</th>
+                <th>样本</th>
+              </tr>
+            </thead>
+            <tbody id="d-horizons-body">
+              <tr><td colspan="6" style="color:var(--muted);text-align:center">请选择股票</td></tr>
+            </tbody>
+          </table>
         </div>
-      </div>
 
-      <!-- 历史回测 -->
-      <div class="d-section">
-        <div class="d-section-title">历史回测绩效</div>
-        <div class="d-grid">
-          <div class="d-cell"><div class="d-cell-label" title="回测区间内有效金叉信号总数。≥5次统计才可靠">信号次数</div><div class="d-cell-value" id="d-sig">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="历史有效=样本充足；样本不足=数据区间短；无有效信号=未出现金叉；信号不足=次数少于阈值">历史状态</div><div class="d-cell-value" id="d-hist-status">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="历史金叉后按持仓期卖出盈利占比。>60%稳健；<40%策略效果差">历史胜率</div><div class="d-cell-value" id="d-wr">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="历史所有金叉持仓期平均收益率。正数越高越好；负数说明历史买入大多亏损">均收益</div><div class="d-cell-value" id="d-ret">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="Calmar=均收益/均回撤绝对值。>2.0优秀；>1.0良好；<0.5性价比低">Calmar</div><div class="d-cell-value" id="d-cal">—</div></div>
-          <div class="d-cell"><div class="d-cell-label" title="持仓期最大浮亏均值（负数越接近0越好）。<-15%说明波动大">均回撤</div><div class="d-cell-value" id="d-dd">—</div></div>
-        </div>
-      </div>
-
-      <!-- MACD chart -->
-      <div class="d-section" id="charts">
-        <div class="d-section-title">MACD 走势 · 近 90 日</div>
-        <div class="chart-stack">
-          <div id="macd-combo-chart" class="chart-host"></div>
-          <div class="chart-legend" aria-hidden="true">
-            <span><i class="legend-line" style="background:#2f6fdd"></i>收盘 / DEA</span>
-            <span><i class="legend-line" style="background:#b07a0a"></i>DIF</span>
-            <span><i class="legend-dot" style="background:#c4332f"></i>金叉</span>
-            <span><i class="legend-dot" style="background:#1f9e6e"></i>死叉</span>
+        <!-- 4. Long-term validation — 历史回测 -->
+        <div class="d-section section-history">
+          <div class="d-section-title">历史回测绩效</div>
+          <div class="d-grid">
+            <div class="d-cell"><div class="d-cell-label" title="回测区间内有效金叉信号总数。≥5次统计才可靠">信号次数</div><div class="d-cell-value mono" id="d-sig">—</div></div>
+            <div class="d-cell"><div class="d-cell-label" title="历史回测数据完整性">历史状态</div><div class="d-cell-value" id="d-hist-status">—</div></div>
+            <div class="d-cell"><div class="d-cell-label" title="历史金叉后持仓期盈利占比。>60%稳健；<40%效果差">历史胜率</div><div class="d-cell-value mono" id="d-wr">—</div></div>
+            <div class="d-cell"><div class="d-cell-label" title="历史所有金叉持仓期平均收益率">均收益</div><div class="d-cell-value" id="d-ret">—</div></div>
+            <div class="d-cell"><div class="d-cell-label" title="持仓期最大浮亏均值（负数越接近0越好）">均回撤</div><div class="d-cell-value" id="d-dd">—</div></div>
+            <div class="d-cell"><div class="d-cell-label" title="均收益/均回撤绝对值。>2.0优秀；>1.0良好">Calmar</div><div class="d-cell-value mono" id="d-cal">—</div></div>
           </div>
         </div>
       </div>
@@ -928,7 +1352,7 @@ const METRIC_HELP = {
 const TABLE_COLUMNS = [
   { key:'recommendation',    label:'建议',    filterType:'select', options:()=>['','强推荐','今日候选','买入窗口','提前关注','持仓观察','风险提示','等待'], width:82, display:r=>renderRecommendationCell(r) },
   { key:'status',            label:'状态',    filterType:'select',       options:()=>['','刚金叉','即将金叉','持仓期','刚死叉','等待'], width:86 },
-  { key:'code',              label:'代码',    filterType:'text',          width:70, display:r=>`<span class="cell-code">${r.code}</span>` },
+  { key:'code',              label:'代码',    filterType:'text',          width:92, display:r=>renderStockCodeLink(r.code) },
   { key:'name',              label:'名称',    filterType:'text',          width:100, display:r=>`<span class="cell-name">${r.name||''}</span>` },
   { key:'trade_ref_holding_days', label:'周期',filterType:'number',       width:58, display:r=>r.trade_ref_holding_days!=null?`${r.trade_ref_holding_days}天`:'—' },
   { key:'trade_buy_price',   label:'买入价',  filterType:'number',        width:72, display:r=>renderBuyPriceCell(r) },
@@ -948,6 +1372,7 @@ const TABLE_COLUMNS = [
 ───────────────────────────────────────────────── */
 let allStocks = [];
 let filtered  = [];
+let chartPrice = null, chartMacd = null;
 let activeRightTab = 'detail';
 let tableSort = { key:'recommendation', dir:1 };
 let activeQuickFilter = 'all';
@@ -988,6 +1413,26 @@ function histStatusText(r) {
   return HISTORY_STATUS_LABELS[histStatusCode(r)] || '—';
 }
 
+function xueqiuSymbol(code) {
+  const s = String(code || '').trim();
+  if (!s) return '';
+  if (s.startsWith('6')) return `SH${s}`;
+  if (s.startsWith('0') || s.startsWith('3')) return `SZ${s}`;
+  if (s.startsWith('4') || s.startsWith('8')) return `BJ${s}`;
+  return s;
+}
+
+function xueqiuUrl(code) {
+  const symbol = xueqiuSymbol(code);
+  return symbol ? `https://xueqiu.com/S/${symbol}` : '#';
+}
+
+function renderStockCodeLink(code, className='cell-code') {
+  const s = String(code || '').trim();
+  if (!s) return '—';
+  return `<a class="${className}" href="${xueqiuUrl(s)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${s}</a>`;
+}
+
 function recommendationLabel(r) {
   if (r.is_strong_pick || r.is_buy_point) return '强推荐';
   if (r.is_today_candidate) return '今日候选';
@@ -1026,21 +1471,27 @@ function renderPendingTradeText(text) {
   return `<span style="font-size:11px;color:var(--muted)">${text}</span>`;
 }
 
+function isTradePendingBuy(r) {
+  if (r.trade_pending_buy) return true;
+  if (r.trade_buy_price != null) return false;
+  return r.status === '刚金叉';
+}
+
 function renderBuyPriceCell(r) {
-  if (r.trade_buy_price != null) return `¥${fmtNum(r.trade_buy_price,2,'—')}`;
-  if (r.trade_pending_buy) return renderPendingTradeText('待T+1');
+  if (r.trade_buy_price != null) return fmtNum(r.trade_buy_price,2,'—');
+  if (isTradePendingBuy(r)) return renderPendingTradeText('待T+1');
   return '—';
 }
 
 function renderEvalPriceCell(r) {
   const price = r.trade_eval_price ?? r.trade_latest_price;
-  if (price != null) return `¥${fmtNum(price,2,'—')}`;
+  if (price != null) return fmtNum(price,2,'—');
   return '—';
 }
 
 function renderTradeRetCell(r) {
   if (r.trade_ref_ret != null) return fmtSignedPct(r.trade_ref_ret,2,'—');
-  if (r.trade_pending_buy) return renderPendingTradeText('待买入');
+  if (isTradePendingBuy(r)) return renderPendingTradeText('待买入');
   return '—';
 }
 
@@ -1290,27 +1741,19 @@ function renderTable() {
 }
 
 function detachDetailPanel(destroy=false) {
-  const detail = document.getElementById('rpanel-detail');
   const host = document.getElementById('detail-template-host');
-  if (!detail || !host) return;
+  const backdrop = document.getElementById('detail-backdrop');
   if (destroy) destroyCharts();
-  detail.classList.remove('inline-detail-card');
-  if (detail.parentElement !== host) host.appendChild(detail);
-  document.querySelectorAll('.detail-row').forEach(r => r.remove());
+  if (host) host.classList.remove('open');
+  if (backdrop) backdrop.classList.remove('open');
 }
 
-function insertDetailRow(anchorRow) {
-  const detail = document.getElementById('rpanel-detail');
-  if (!detail || !anchorRow) return;
-  const tr = document.createElement('tr');
-  tr.className = 'detail-row';
-  const td = document.createElement('td');
-  td.className = 'detail-cell';
-  td.colSpan = getCols().length;
-  detail.classList.add('inline-detail-card');
-  td.appendChild(detail);
-  tr.appendChild(td);
-  anchorRow.after(tr);
+function insertDetailRow(/* anchorRow */) {
+  // Drawer-based: just open the panel; no DOM moves.
+  const host = document.getElementById('detail-template-host');
+  const backdrop = document.getElementById('detail-backdrop');
+  if (host) host.classList.add('open');
+  if (backdrop) backdrop.classList.add('open');
 }
 
 function collapseDetail(scrollBack=true) {
@@ -1442,20 +1885,12 @@ function fillDetail(row) {
   document.getElementById('d-exit-price').innerHTML = renderEvalPriceCell(row);
   document.getElementById('d-trade-ret').innerHTML = renderTradeRetCell(row);
 
-  let sellHintText = row.sell_hint || '—';
-  if (row.trade_pending_buy) {
-    sellHintText = `${row.trade_signal_date || row.last_gc_date || '最新交易日'}金叉，等待下一交易日收盘价确认买入参考价`;
-  } else if (row.trade_buy_date && row.trade_eval_date) {
-    const mode = row.trade_reached_target ? '已到参考卖点' : `未到期，还需${row.trade_remaining_days ?? '-'}天`;
-    sellHintText = `${row.trade_buy_date}买入，${row.trade_eval_date}验证，${mode}`;
-  }
-  if (!row.sell_hint && row.status==='即将金叉' && row.days_event!=null) {
-    sellHintText = `预计 ${row.days_event} 天金叉`;
-  }
-  document.getElementById('d-sell-hint').textContent = sellHintText;
+  let sellHintText = row.sell_hint || '';
+  // Populate execution plan timeline (promoted to top of the report)
+  fillExecPlan(row);
 
   const score = row.buy_score || 0;
-  document.getElementById('d-score').textContent = `${score} 分`;
+  document.getElementById('d-score').textContent = `${score}`;
   document.getElementById('d-score-bar').style.width = Math.min(score, 100) + '%';
   const barEl = document.getElementById('d-score-bar');
   barEl.style.background = score>=60 ? 'var(--red)' : score>=35 ? 'var(--yellow)' : 'var(--muted)';
@@ -1463,25 +1898,31 @@ function fillDetail(row) {
   // 持仓期分析
   fillHorizonTable(row);
 
-  // 当前状态
-  document.getElementById('d-code').textContent    = `${row.code} ${row.name||''}`;
+  // Header bar
+  const detailCode = document.getElementById('d-code');
+  detailCode.textContent = row.code || '—';
+  detailCode.href = xueqiuUrl(row.code);
+  document.getElementById('d-name').textContent    = row.name || '';
   document.getElementById('d-status').innerHTML    = STATUS_BADGE[row.status]||row.status||'—';
-  document.getElementById('d-dif').textContent     = row.cur_dif!=null?row.cur_dif.toFixed(2):'—';
-  document.getElementById('d-dea').textContent     = row.cur_dea!=null?row.cur_dea.toFixed(2):'—';
-  document.getElementById('d-close').textContent   = row.cur_close!=null?`¥${row.cur_close.toFixed(2)}`:'—';
-  document.getElementById('d-gap').textContent     = row.gap!=null?row.gap.toFixed(2):'—';
-  document.getElementById('d-amtr').textContent    = row.cur_amt_r20!=null?`${row.cur_amt_r20.toFixed(2)}x`:'—';
-  document.getElementById('d-price60').textContent = row.cur_price60!=null?`${(row.cur_price60*100).toFixed(2)}%`:'—';
-
-  // 标的信息
   document.getElementById('d-ind').textContent     = row.industry||'—';
   document.getElementById('d-type').textContent    = row.archetype||'—';
-  document.getElementById('d-hchg').textContent    = row.holder_chg!=null?`${(row.holder_chg*100).toFixed(2)}%`:'—';
   document.getElementById('d-lgc').textContent     = row.last_gc_date||'—';
-  document.getElementById('d-f1').textContent      = row.f1_hit?'是':'否';
-  document.getElementById('d-f3').textContent      = row.f3_hit?'是':'否';
-  document.getElementById('d-f5').textContent      = row.f5_hit?'是':'否';
-  document.getElementById('d-hitcnt').textContent  = row.formula_hit_count??'—';
+  document.getElementById('d-close').textContent   = row.cur_close!=null?row.cur_close.toFixed(2):'—';
+  document.getElementById('d-dif').textContent     = row.cur_dif!=null?row.cur_dif.toFixed(2):'—';
+  document.getElementById('d-dea').textContent     = row.cur_dea!=null?row.cur_dea.toFixed(2):'—';
+
+  // 当前指标
+  document.getElementById('d-gap').textContent     = row.gap!=null?row.gap.toFixed(2):'—';
+  document.getElementById('d-amtr').textContent    = row.cur_amt_r20!=null?`${row.cur_amt_r20.toFixed(2)}×`:'—';
+  document.getElementById('d-price60').textContent = row.cur_price60!=null?`${(row.cur_price60*100).toFixed(1)}%`:'—';
+  document.getElementById('d-hchg').textContent    = row.holder_chg!=null?`${(row.holder_chg*100).toFixed(2)}%`:'—';
+
+  // 公式命中 (合并 F1/F3/F5/命中数)
+  const fchip = (k, on) => `<span class="fchip${on?' fchip-on':''}">${k}</span>`;
+  const hits = row.formula_hit_count ?? ((row.f1_hit?1:0)+(row.f3_hit?1:0)+(row.f5_hit?1:0));
+  document.getElementById('d-formulas').innerHTML =
+    `${fchip('F1', row.f1_hit)}${fchip('F3', row.f3_hit)}${fchip('F5', row.f5_hit)}` +
+    `<span class="fchip-count">共 ${hits} 项</span>`;
 
   // 历史回测
   document.getElementById('d-hist-status').textContent = histStatusText(row);
@@ -1499,6 +1940,48 @@ function fillDetail(row) {
   document.getElementById('d-dd').innerHTML    = row.avg_dd!=null?fmtSignedPct(row.avg_dd,2):'—';
 }
 
+function fillExecPlan(row) {
+  const wrap = document.getElementById('exec-plan');
+  if (!wrap) return;
+  const pendingBuy = isTradePendingBuy(row);
+  const hasAnyTrade = pendingBuy || row.trade_buy_date || row.trade_eval_date || row.trade_buy_price != null;
+  if (!hasAnyTrade) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+
+  const buyDate  = pendingBuy ? '待 T+1' : (row.trade_buy_date || '—');
+  const buyPrice = row.trade_buy_price != null ? Number(row.trade_buy_price).toFixed(2) : (pendingBuy ? '待确认' : '—');
+  const sellDate = row.trade_eval_date || (row.best_holding_days ? `+${row.best_holding_days} 天` : '—');
+  const sellLabel = row.trade_reached_target ? '参考卖出' : (row.status==='持仓期' ? '预计卖出' : '参考卖出');
+  const sellPriceVal = row.trade_eval_price ?? row.trade_latest_price;
+  const sellPrice = sellPriceVal != null ? Number(sellPriceVal).toFixed(2) : '—';
+
+  document.getElementById('ep-buy-date').textContent = buyDate;
+  document.getElementById('ep-buy-price').textContent = buyPrice;
+  document.getElementById('ep-sell-label').textContent = sellLabel;
+  document.getElementById('ep-sell-date').textContent = sellDate;
+  document.getElementById('ep-sell-price').textContent = sellPrice;
+
+  // State pill on the right — done / pending / wait, with color
+  const state = document.getElementById('ep-state');
+  state.classList.remove('is-done', 'is-pending', 'is-wait');
+  if (pendingBuy) {
+    state.textContent = '等待买入';
+    state.classList.add('is-wait');
+  } else if (row.trade_reached_target) {
+    state.textContent = '已到参考卖点';
+    state.classList.add('is-done');
+  } else if (row.trade_remaining_days != null) {
+    state.textContent = `还需 ${row.trade_remaining_days} 天`;
+    state.classList.add('is-pending');
+  } else if (row.status === '即将金叉' && row.days_event != null) {
+    state.textContent = `预计 ${row.days_event} 天金叉`;
+    state.classList.add('is-pending');
+  } else {
+    state.textContent = '跟踪中';
+    state.classList.add('is-wait');
+  }
+}
+
 function selectRow(code) {
   if (selectedCode === code) {
     collapseDetail(true);
@@ -1506,25 +1989,31 @@ function selectRow(code) {
   }
   const row = allStocks.find(x=>x.code===code);
   if (!row) return;
-  detachDetailPanel(true);
+  destroyCharts();
   document.querySelectorAll('#tbody tr.selected').forEach(t => t.classList.remove('selected'));
   selectedCode = code;
   const tableRow = document.querySelector(`#tbody tr[data-code="${code}"]`);
-  if (!tableRow) return;
-  tableRow.classList.add('selected');
-  insertDetailRow(tableRow);
+  if (tableRow) tableRow.classList.add('selected');
   fillDetail(row);
   loadChart(code);
-  const detailRow = document.querySelector('.detail-row');
-  if (detailRow) detailRow.scrollIntoView({block:'nearest', behavior:'auto'});
+  // Open the drawer
+  insertDetailRow(tableRow);
+  // Reset drawer scroll to top so the user always sees the header first
+  const body = document.querySelector('.detail-template-host .rpanel-content');
+  if (body) body.scrollTop = 0;
 }
+
+// Esc to close the inline detail card
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && selectedCode) collapseDetail(false);
+});
 
 /* ─────────────────────────────────────────────────
    Charts
 ───────────────────────────────────────────────── */
 function destroyCharts() {
-  const host = document.getElementById('macd-combo-chart');
-  if (host) host.innerHTML = '';
+  if (chartPrice) { chartPrice.destroy(); chartPrice=null; }
+  if (chartMacd)  { chartMacd.destroy();  chartMacd=null; }
 }
 
 async function loadChart(code) {
@@ -1532,119 +2021,131 @@ async function loadChart(code) {
   const d = await fetch(`/api/chart/${code}${q}`).then(r=>r.json()).catch(()=>null);
   if (!d||!d.dates||!d.dates.length) return;
   destroyCharts();
-  renderMacdComboChart(d);
-}
 
-function asFiniteSeries(values, n) {
-  return Array.from({length:n}, (_, i) => {
-    const v = Number(values?.[i]);
-    return Number.isFinite(v) ? v : null;
+  const labels = d.dates.map(x=>String(x).slice(5));
+  const gc = new Set((d.crosses||[]).filter(c=>c.type==='golden').map(c=>c.idx));
+  const dc = new Set((d.crosses||[]).filter(c=>c.type==='death').map(c=>c.idx));
+  const n = labels.length;
+
+  // Brand colors (sync with CSS custom props)
+  const C = {
+    accent: '#2d6cdf',
+    accentSoft: 'rgba(45, 108, 223, 0.10)',
+    accentSofter: 'rgba(45, 108, 223, 0.02)',
+    dif: '#b07d10',
+    pos: '#c4302b',           // 中国市场: 红涨
+    neg: '#1f9e6e',           // 绿跌
+    posBar: 'rgba(196, 48, 43, 0.55)',
+    negBar: 'rgba(31, 158, 110, 0.55)',
+    grid: 'rgba(20, 18, 14, 0.05)',
+    tick: '#8a877f',
+  };
+
+  // Gradient area fill for the price line
+  const priceCanvas = document.getElementById('chart-price');
+  const priceCtx = priceCanvas.getContext('2d');
+  const grad = priceCtx.createLinearGradient(0, 0, 0, priceCanvas.height || 140);
+  grad.addColorStop(0, C.accentSoft);
+  grad.addColorStop(1, C.accentSofter);
+
+  chartPrice = new Chart(priceCtx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: '收盘价',
+        data: d.close,
+        borderColor: C.accent,
+        borderWidth: 1.6,
+        backgroundColor: grad,
+        fill: true,
+        tension: 0.28,
+        pointRadius: Array.from({length:n}, (_,i)=>(gc.has(i)||dc.has(i))?6:0),
+        pointHoverRadius: Array.from({length:n}, (_,i)=>(gc.has(i)||dc.has(i))?7:0),
+        pointBackgroundColor: Array.from({length:n}, (_,i)=>gc.has(i)?C.pos:dc.has(i)?C.neg:'transparent'),
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 1.4,
+        pointStyle: Array.from({length:n}, (_,i)=>(gc.has(i)||dc.has(i))?'triangle':'circle'),
+        pointRotation: Array.from({length:n}, (_,i)=>dc.has(i)?180:0),
+      }]
+    },
+    options: chartOpts('', false, C)
+  });
+
+  chartMacd = new Chart(document.getElementById('chart-macd').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { type:'line', label:'DIF', data:d.dif, borderColor:C.dif, borderWidth:1.4, pointRadius:0, tension:0.25, fill:false },
+        { type:'line', label:'DEA', data:d.dea, borderColor:C.accent, borderWidth:1.4, pointRadius:0, tension:0.25, fill:false, borderDash:[3,2] },
+        { type:'bar',  label:'MACD', data:d.bar,
+          backgroundColor: d.bar.map(v => v>=0?C.posBar:C.negBar),
+          borderColor:     d.bar.map(v => v>=0?C.pos:C.neg),
+          borderWidth: 0.6,
+          borderRadius: 1,
+          barPercentage: 0.85,
+          categoryPercentage: 0.95,
+        },
+      ]
+    },
+    options: chartOpts('', true, C)
   });
 }
 
-function finiteValues(values) {
-  return values.filter(v => Number.isFinite(v));
-}
-
-function makeScale(min, max, outMin, outMax) {
-  const span = max - min || Math.max(Math.abs(max), 1);
-  const pad = span * 0.08;
-  const lo = min - pad;
-  const hi = max + pad;
-  return v => outMin + (1 - (v - lo) / (hi - lo || 1)) * (outMax - outMin);
-}
-
-function linePath(values, xAt, yAt) {
-  let path = '';
-  let open = false;
-  values.forEach((v, i) => {
-    if (!Number.isFinite(v)) {
-      open = false;
-      return;
-    }
-    path += `${open ? 'L' : 'M'}${xAt(i).toFixed(1)} ${yAt(v).toFixed(1)} `;
-    open = true;
-  });
-  return path.trim();
-}
-
-function areaPath(values, xAt, yAt, baselineY) {
-  const points = values
-    .map((v, i) => Number.isFinite(v) ? [xAt(i), yAt(v)] : null)
-    .filter(Boolean);
-  if (!points.length) return '';
-  const first = points[0];
-  const last = points[points.length - 1];
-  const top = points.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
-  return `${top} L${last[0].toFixed(1)} ${baselineY.toFixed(1)} L${first[0].toFixed(1)} ${baselineY.toFixed(1)} Z`;
-}
-
-function renderMacdComboChart(data) {
-  const host = document.getElementById('macd-combo-chart');
-  if (!host) return;
-  const n = data.dates?.length || 0;
-  if (!n) {
-    host.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:24px">暂无走势数据</div>';
-    return;
-  }
-
-  const close = asFiniteSeries(data.close, n);
-  const dif = asFiniteSeries(data.dif, n);
-  const dea = asFiniteSeries(data.dea, n);
-  const bar = asFiniteSeries(data.bar, n);
-  const closeVals = finiteValues(close);
-  const macdVals = finiteValues([...dif, ...dea, ...bar, 0]);
-  if (!closeVals.length || !macdVals.length) return;
-
-  const w = 760, h = 320;
-  const pad = {l:18, r:18, t:14, b:12};
-  const priceTop = 18, priceBottom = 150;
-  const macdTop = 178, macdBottom = 288;
-  const plotW = w - pad.l - pad.r;
-  const xAt = i => pad.l + (n === 1 ? 0 : (i / (n - 1)) * plotW);
-  const yPrice = makeScale(Math.min(...closeVals), Math.max(...closeVals), priceTop, priceBottom);
-  const yMacd = makeScale(Math.min(...macdVals), Math.max(...macdVals), macdTop, macdBottom);
-  const pricePath = linePath(close, xAt, yPrice);
-  const priceArea = areaPath(close, xAt, yPrice, priceBottom + 6);
-  const difPath = linePath(dif, xAt, yMacd);
-  const deaPath = linePath(dea, xAt, yMacd);
-  const zeroY = yMacd(0);
-  const barW = Math.max(1.5, Math.min(7, plotW / Math.max(n, 1) * 0.48));
-  const gridX = [0, .2, .4, .6, .8, 1].map(t => pad.l + t * plotW);
-  const gridY = [priceTop, (priceTop + priceBottom) / 2, priceBottom, macdTop, (macdTop + macdBottom) / 2, macdBottom];
-
-  const bars = bar.map((v, i) => {
-    if (!Number.isFinite(v)) return '';
-    const y = yMacd(v);
-    const fill = v >= 0 ? 'rgba(196,51,47,.12)' : 'rgba(31,158,110,.12)';
-    return `<rect x="${(xAt(i)-barW/2).toFixed(1)}" y="${Math.min(y, zeroY).toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.abs(y-zeroY).toFixed(1)}" fill="${fill}"/>`;
-  }).join('');
-
-  const crosses = (data.crosses || []).map(c => {
-    const idx = Number(c.idx);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= n || !Number.isFinite(close[idx])) return '';
-    const isGolden = c.type === 'golden';
-    return `<circle cx="${xAt(idx).toFixed(1)}" cy="${yPrice(close[idx]).toFixed(1)}" r="5.2" fill="${isGolden ? '#c4332f' : '#1f9e6e'}" stroke="#fff" stroke-width="2"/>`;
-  }).join('');
-
-  host.innerHTML = `
-    <svg class="macd-combo-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="MACD 走势近 90 日">
-      <defs>
-        <linearGradient id="priceFillGradient" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stop-color="#2f6fdd" stop-opacity=".16"/>
-          <stop offset="100%" stop-color="#2f6fdd" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
-      ${gridX.map(x => `<line class="chart-grid-line" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${priceTop}" y2="${macdBottom}"/>`).join('')}
-      ${gridY.map(y => `<line class="chart-grid-line" x1="${pad.l}" x2="${w-pad.r}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>`).join('')}
-      <path d="${priceArea}" fill="url(#priceFillGradient)"/>
-      <path d="${pricePath}" fill="none" stroke="#2f6fdd" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
-      ${crosses}
-      <line x1="${pad.l}" x2="${w-pad.r}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}" stroke="var(--border-strong)" stroke-width=".8"/>
-      ${bars}
-      <path d="${difPath}" fill="none" stroke="#b07a0a" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="${deaPath}" fill="none" stroke="#2f6fdd" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`;
+function chartOpts(prefix, isMacd, C) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 280, easing: 'easeOutCubic' },
+    layout: { padding: { top: 6, right: 4, bottom: 0, left: 0 } },
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(31, 29, 26, 0.94)',
+        titleColor: '#ffffff',
+        titleFont: { size: 11, weight: '600' },
+        bodyColor: '#e8e6e0',
+        bodyFont: { size: 11, family: "'JetBrains Mono', 'SF Mono', 'Menlo', monospace" },
+        padding: 8,
+        cornerRadius: 6,
+        borderColor: 'rgba(255,255,255,0.08)',
+        borderWidth: 1,
+        displayColors: true,
+        boxWidth: 8,
+        boxHeight: 8,
+        boxPadding: 4,
+        callbacks: {
+          label: (ctx) => `${ctx.dataset.label}: ${prefix}${typeof ctx.raw==='number'?ctx.raw.toFixed(isMacd?3:2):ctx.raw}`
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { display: false, drawBorder: false },
+        ticks: {
+          color: C.tick,
+          maxTicksLimit: 6,
+          autoSkip: true,
+          font: { size: 10, family: "'JetBrains Mono', monospace" },
+          padding: 2,
+        },
+        border: { color: C.grid }
+      },
+      y: {
+        grid: { color: C.grid, drawBorder: false, lineWidth: 1 },
+        ticks: {
+          color: C.tick,
+          maxTicksLimit: 5,
+          font: { size: 10, family: "'JetBrains Mono', monospace" },
+          padding: 4,
+          callback: (v) => prefix + (typeof v==='number' ? (isMacd ? v.toFixed(2) : v.toFixed(0)) : v),
+        },
+        border: { display: false }
+      }
+    },
+  };
 }
 
 function setDataDateLabel(s) {
