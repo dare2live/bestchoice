@@ -27,8 +27,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="MACD 金叉选股", lifespan=lifespan)
 
 HTML_FILE = Path(__file__).parent / "index.html"
-DARK_HTML_FILE = Path(__file__).parent / "recovered_versions" / "index_first_dark_20260508_before_110854.html"
-DARK_LEGACY_PROFILE_ID = "first_dark_legacy"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -36,34 +34,12 @@ async def root():
     return HTML_FILE.read_text(encoding="utf-8")
 
 
-@app.get("/dark", response_class=HTMLResponse)
-async def dark():
-    if not DARK_HTML_FILE.exists():
-        raise HTTPException(404, "深色第一版页面不存在")
-    try:
-        engine.set_profile(DARK_LEGACY_PROFILE_ID)
-    except KeyError:
-        raise HTTPException(404, "深色第一版复现策略不存在")
-
-    html = DARK_HTML_FILE.read_text(encoding="utf-8")
-    html = html.replace(
-        'fetch("/api/data")',
-        f'fetch("/api/data?strategy={DARK_LEGACY_PROFILE_ID}")',
-    )
-    html = html.replace(
-        'fetch(`/api/chart/${code}`)',
-        f'fetch(`/api/chart/${{code}}?strategy={DARK_LEGACY_PROFILE_ID}`)',
-    )
-    html = html.replace(
-        'fetch("/api/refresh", {method:"POST"})',
-        f'fetch("/api/refresh?strategy={DARK_LEGACY_PROFILE_ID}", {{method:"POST"}})',
-    )
-    return html
-
-
 @app.get("/api/status")
-async def api_status():
-    s = engine.status()
+async def api_status(strategy: Optional[str] = None):
+    try:
+        s = engine.status(strategy)
+    except KeyError:
+        raise HTTPException(404, f"未找到策略: {strategy}")
     s["latest_data_date"] = get_latest_data_date()
     return s
 
@@ -73,7 +49,7 @@ async def api_strategies():
     return {
         "profiles": engine.profiles(),
         "active_profile_id": engine.active_profile_id(),
-        "default_profile_id": engine.active_profile_id(),
+        "default_profile_id": engine.default_profile_id(),
     }
 
 
@@ -81,11 +57,11 @@ async def api_strategies():
 async def api_data(strategy: Optional[str] = None):
     if strategy:
         try:
-            engine.set_profile(strategy)
+            engine.ensure_profile(strategy)
         except KeyError:
             raise HTTPException(404, f"未找到策略: {strategy}")
 
-    d = engine.data()
+    d = engine.data_for_profile(strategy)
     if d is None:
         raise HTTPException(503, "数据尚未就绪，请稍候")
     return JSONResponse(d)
@@ -97,7 +73,7 @@ async def api_ready(strategy: str):
     profiles = engine.profiles()
     if strategy not in profiles:
         raise HTTPException(404, f"未找到策略: {strategy}")
-    d = engine._data_cache.get(strategy)
+    d = engine.data_for_profile(strategy)
     return {"ready": d is not None, "strategy": strategy}
 
 
@@ -114,7 +90,7 @@ async def api_chart(code: str, strategy: Optional[str] = None):
 @app.post("/api/refresh")
 async def api_refresh(strategy: Optional[str] = None):
     try:
-        engine.restart(strategy, clear_cache=True)
+        engine.restart(strategy, clear_cache=True, activate=(strategy is None))
     except KeyError:
         raise HTTPException(404, f"未找到策略: {strategy}")
     return {"ok": True, "message": "已触发重新计算"}

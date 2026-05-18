@@ -1,0 +1,18 @@
+{
+  "macd_combo": "S",
+  "macd_fast": 10,
+  "macd_slow": 22,
+  "macd_signal": 8,
+  "holding_days": 10,
+  "vol_ratio_min": 0.5231824059330973,
+  "amt_ratio_min": 1.2696418545772363,
+  "price_pos_max": 0.6068160957414361,
+  "dif_positive": false,
+  "score": 6.470802791030591,
+  "signal_count": 1191,
+  "stock_count": 950,
+  "win_rate": 0.6263643996641478,
+  "median_ret": 0.051653660349312555,
+  "median_dd": 0.0,
+  "price_mode": "qfq_next_close"
+}

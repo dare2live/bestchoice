@@ -521,6 +521,18 @@ td { font-size: 13px; }
             <div class="timing-value" id="d-best-hp">—</div>
           </div>
           <div class="timing-cell">
+            <div class="timing-label">买入价</div>
+            <div class="timing-value" id="d-buy-price">—</div>
+          </div>
+          <div class="timing-cell">
+            <div class="timing-label">参考卖出/最新价</div>
+            <div class="timing-value" id="d-exit-price">—</div>
+          </div>
+          <div class="timing-cell">
+            <div class="timing-label">最新验证收益</div>
+            <div class="timing-value" id="d-trade-ret">—</div>
+          </div>
+          <div class="timing-cell">
             <div class="timing-label">卖出建议</div>
             <div class="timing-value" id="d-sell-hint">—</div>
           </div>
@@ -647,6 +659,10 @@ const METRIC_HELP = {
   history_status: { desc:'历史回测数据完整性', high:'历史有效：样本充足', low:'样本不足/无信号：数据不可信' },
   holder_chg:     { desc:'最近报告期股东户数环比变化', high:'正：筹码分散（散户涌入）', low:'负：筹码集中（可能主力控盘）' },
   best_holding_days:{ desc:'历史上Calmar最高的持仓天数', high:'越接近实际持仓期越好', low:'偏差大说明需要调整策略持仓期' },
+  trade_buy_price:{ desc:'最近一次金叉后下一交易日的前复权收盘买入参考价' },
+  trade_eval_price:{ desc:'按该股票最优持仓期对应的卖出价；若尚未到期，则为最新K线收盘价' },
+  trade_ref_ret:{ desc:'最近一次买点按该股票最优持仓期验证到目标卖出日或最新K线的收益率' },
+  trade_ref_holding_days:{ desc:'该股票历史Calmar最高的持仓周期，用于最近买点验证' },
 };
 
 /* ── Signal tab columns ── */
@@ -659,6 +675,10 @@ const SIGNAL_COLUMNS = [
   { key:'avg_dd',            label:'均回撤',  filterType:'number', filterScale:100, width:72, display:r=>fmtSignedPct(r.avg_dd,2,'—') },
   { key:'calmar',            label:'Calmar',  filterType:'number',        width:66, display:r=>fmtNum(r.calmar,2,'—') },
   { key:'is_buy_point',      label:'买点',    filterType:'bool',          width:48, display:r=>r.is_buy_point?'<span style="color:var(--gold);font-size:14px">★</span>':'—' },
+  { key:'trade_ref_holding_days', label:'参考周期',filterType:'number',  width:72, display:r=>r.trade_ref_holding_days!=null?`${r.trade_ref_holding_days}天`:'—' },
+  { key:'trade_buy_price',   label:'买入价',  filterType:'number',        width:72, display:r=>r.trade_buy_price!=null?`¥${fmtNum(r.trade_buy_price,2,'—')}`:'—' },
+  { key:'trade_eval_price',  label:'卖/最新价',filterType:'number',       width:78, display:r=>r.trade_eval_price!=null?`¥${fmtNum(r.trade_eval_price,2,'—')}`:'—' },
+  { key:'trade_ref_ret',     label:'验证收益',filterType:'number', filterScale:100, width:78, display:r=>fmtSignedPct(r.trade_ref_ret,2,'—') },
   { key:'sell_hint_display', label:'持仓提示',filterType:'text',          width:130, display:r=>renderSellHintCell(r) },
 ];
 
@@ -1174,8 +1194,15 @@ function fillDetail(row) {
 
   document.getElementById('d-action').textContent   = actionText;
   document.getElementById('d-best-hp').textContent  = row.best_holding_days!=null ? `${row.best_holding_days} 天` : '—';
+  document.getElementById('d-buy-price').textContent = row.trade_buy_price!=null ? `¥${Number(row.trade_buy_price).toFixed(2)}` : '—';
+  document.getElementById('d-exit-price').textContent = row.trade_eval_price!=null ? `¥${Number(row.trade_eval_price).toFixed(2)}` : '—';
+  document.getElementById('d-trade-ret').innerHTML = fmtSignedPct(row.trade_ref_ret,2,'—');
 
   let sellHintText = row.sell_hint || '—';
+  if (row.trade_buy_date && row.trade_eval_date) {
+    const mode = row.trade_reached_target ? '已到参考卖点' : `未到期，还需${row.trade_remaining_days ?? '-'}天`;
+    sellHintText = `${row.trade_buy_date}买入，${row.trade_eval_date}验证，${mode}`;
+  }
   if (!row.sell_hint && row.status==='即将金叉' && row.days_event!=null) {
     sellHintText = `预计 ${row.days_event} 天金叉`;
   }

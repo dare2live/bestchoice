@@ -18,6 +18,7 @@ macd_optuna_backtest.py — DuckDB + numpy + Optuna，无 pandas
 from __future__ import annotations
 
 import csv
+import json
 import sys
 import time
 from pathlib import Path
@@ -27,11 +28,14 @@ import numpy as np
 import optuna
 from numpy.lib.stride_tricks import sliding_window_view
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from settings import MARKET_DB, SMART_DB
+
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-BASE      = Path(__file__).resolve().parent.parent
-MARKET_DB = BASE / "data/market.duckdb"
-SMART_DB  = BASE / "data/smartmoney.duckdb"
 OUT_DIR   = Path(__file__).resolve().parent
 
 HOLDING_PERIODS = [5, 10, 15, 20, 30, 40, 60]
@@ -172,7 +176,7 @@ def signals_for_stock(
                 or amt_ma20[si] <= 0 or np.isnan(amt_ma20[si])
                 or max60[si] <= 0):
             continue
-        if volume64[buy_i] <= 0 or amount64[buy_i] <= 0:
+        if close64[buy_i] <= 0:
             continue  # 停牌
 
         # 因子
@@ -181,8 +185,7 @@ def signals_for_stock(
         amt_r20  = float(amount64[si] / amt_ma20[si])
         price60  = float(close64[si] / max60[si])
 
-        # 买入均价 (次日 VWAP; volume 单位: 手=100股)
-        buy_price = float(amount64[buy_i] / (volume64[buy_i] * 100))
+        buy_price = float(close64[buy_i])
 
         rets: list[float] = []
         dds:  list[float] = []
@@ -195,7 +198,7 @@ def signals_for_stock(
                 sell  = float(close[sell_i])
                 lo    = float(np.min(low64[buy_i: sell_i + 1]))
                 rets.append((sell - buy_price) / buy_price)
-                dds.append((lo   - buy_price) / buy_price)
+                dds.append(min(0.0, (lo - buy_price) / buy_price))
 
         rows.append((dif_val, vol_r20, amt_r20, price60, *rets, *dds))
 
@@ -317,7 +320,7 @@ def main() -> None:
                    COUNT(*)                                               AS n,
                    AVG(CASE WHEN ret_{hp}>0 THEN 1.0 ELSE 0.0 END)      AS win_rate,
                    MEDIAN(ret_{hp})                                       AS med_ret,
-                   MEDIAN(dd_{hp})                                        AS med_dd
+                   MEDIAN(LEAST(dd_{hp}, 0.0))                            AS med_dd
             FROM   signals
             WHERE  {where}
         """).fetchone()
@@ -373,7 +376,7 @@ def main() -> None:
                COUNT(*)                                                  AS n,
                AVG(CASE WHEN ret_{best_hp}>0 THEN 1.0 ELSE 0.0 END)    AS win_rate,
                AVG(ret_{best_hp})                                        AS avg_ret,
-               AVG(dd_{best_hp})                                         AS avg_dd,
+               AVG(LEAST(dd_{best_hp}, 0.0))                             AS avg_dd,
                AVG(vol_r20)                                              AS avg_vol_r20,
                AVG(amt_r20)                                              AS avg_amt_r20,
                AVG(price60)                                              AS avg_price60,
@@ -423,7 +426,7 @@ def main() -> None:
                COUNT(*)             AS n_sig,
                AVG(CASE WHEN ret_{best_hp}>0 THEN 1.0 ELSE 0.0 END) AS win_rate,
                MEDIAN(ret_{best_hp})  AS med_ret,
-               MEDIAN(dd_{best_hp})   AS med_dd
+               MEDIAN(LEAST(dd_{best_hp}, 0.0)) AS med_dd
         FROM   signals
         WHERE  {best_where}
     """).fetchone()
@@ -503,7 +506,36 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(top10)
 
+    params_path = OUT_DIR / "macd_optuna_best_params.json"
+    params_path.write_text(
+        json.dumps(
+            {
+                "macd_combo": best_combo,
+                "macd_fast": fast,
+                "macd_slow": slow,
+                "macd_signal": sig,
+                "holding_days": best_hp,
+                "vol_ratio_min": best_vmin,
+                "amt_ratio_min": best_amin,
+                "price_pos_max": best_pmx,
+                "dif_positive": bool(best_dif),
+                "score": score,
+                "signal_count": int(g_sig or 0),
+                "stock_count": int(g_stk or 0),
+                "win_rate": float(g_wr or 0.0),
+                "median_ret": float(g_ret or 0.0),
+                "median_dd": float(g_dd or 0.0),
+                "price_mode": "qfq_next_close",
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
     print(f"CSV 已保存: {out_path}")
+    print(f"最佳参数已保存: {params_path}")
     print(f"总耗时: {time.time()-t0_total:.1f}s")
 
 

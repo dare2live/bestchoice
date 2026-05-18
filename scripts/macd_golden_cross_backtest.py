@@ -22,12 +22,15 @@ import duckdb
 import numpy as np
 import pandas as pd
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from settings import MARKET_DB, SMART_DB
+
 # ---------------------------------------------------------------------------
 # 路径配置
 # ---------------------------------------------------------------------------
-BASE = Path(__file__).resolve().parent.parent
-MARKET_DB = BASE / "data/market.duckdb"
-SMART_DB  = BASE / "data/smartmoney.duckdb"
 OUT_DIR   = Path(__file__).resolve().parent
 
 # ---------------------------------------------------------------------------
@@ -120,17 +123,15 @@ def backtest_stock(grp: pd.DataFrame) -> list[dict]:
             if sell_i >= n:
                 continue
 
-            vol = grp.at[buy_i, "volume"]
-            amt = grp.at[buy_i, "amount"]
-            if vol <= 0 or amt <= 0:
+            buy_price = grp.at[buy_i, "close"]
+            if buy_price <= 0:
                 continue  # 停牌
 
-            buy_price  = amt / (vol * 100)    # 次日 VWAP (volume 单位: 手=100股)
             sell_price = grp.at[sell_i, "close"]
 
             # 持仓期最低价 → 最大浮亏
             hold_low = grp.loc[buy_i:sell_i, "low"].min()
-            max_dd   = (hold_low - buy_price) / buy_price   # ≤ 0
+            max_dd   = min(0.0, (hold_low - buy_price) / buy_price)
 
             ret = (sell_price - buy_price) / buy_price
 

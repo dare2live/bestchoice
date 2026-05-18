@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 import csv
+import hashlib
 import os
 import threading
 import time
@@ -23,17 +24,12 @@ import duckdb
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
+from settings import CACHE_DIR, CACHE_MAX_AGE, MARKET_DB, MAX_WARMUP_WORKERS, SCRIPTS_DIR, SMART_DB
+
 
 # ---------------------------------------------------------------------------
 # 路径与缓存
 # ---------------------------------------------------------------------------
-_CHUNKY = Path(__file__).resolve().parent.parent / "chunkymonkey"
-MARKET_DB = _CHUNKY / "data/market.duckdb"
-SMART_DB  = _CHUNKY / "data/smartmoney.duckdb"
-# 优化脚本与 CSV 统一放在 bestchoice/scripts/（已从 chunkymonkey 迁移过来）
-SCRIPTS_DIR = Path(__file__).resolve().parent / "scripts"
-CACHE_DIR = Path(__file__).resolve().parent
-CACHE_MAX_AGE = 86400  # 缓存有效期 24h
 HOLDING_PERIODS = [5, 10, 15, 20, 30, 60]  # 多持股期回测天数
 
 
@@ -107,19 +103,6 @@ PARAM_DESCRIPTIONS = {
 # 策略配置
 # ---------------------------------------------------------------------------
 DEFAULT_PROFILES = {
-    "first_dark_legacy": {
-        "id": "first_dark_legacy",
-        "name": "深色第一版复现 · EMA(10,22,8)",
-        "source": "recovered first dark version",
-        "strategy_type": "first_dark_legacy",
-        "macd_fast": 10,
-        "macd_slow": 22,
-        "macd_signal": 8,
-        "holding_days": 15,
-        "amt_ratio_min": 1.42,
-        "price_pos_max": 0.60,
-        "min_signals": 2,
-    },
     "macd_10_22_8_h15": {
         "id": "macd_10_22_8_h15",
         "name": "基准策略 · EMA(10,22,8)",
@@ -181,10 +164,6 @@ FORMULA_PROFILE_RULES = {
     },
 }
 
-# hist_cache_profile_id: formula profiles share historical cache with the base MACD profile
-# (same EMA params → identical historical computation → no need to recompute)
-_FORMULA_HIST_CACHE = "optuna_best"  # will be the default/first computed profile
-
 FORMULA_PROFILES = {
     "f1_only": {
         "id": "formula_f1",
@@ -201,7 +180,6 @@ FORMULA_PROFILES = {
         "amt_ratio_min": 1.0,
         "price_pos_max": 1.0,
         "min_signals": 1,
-        "hist_cache_profile_id": _FORMULA_HIST_CACHE,
     },
     "f3_only": {
         "id": "formula_f3",
@@ -218,7 +196,6 @@ FORMULA_PROFILES = {
         "amt_ratio_min": 1.0,
         "price_pos_max": 1.0,
         "min_signals": 1,
-        "hist_cache_profile_id": _FORMULA_HIST_CACHE,
     },
     "f5_only": {
         "id": "formula_f5",
@@ -235,7 +212,6 @@ FORMULA_PROFILES = {
         "amt_ratio_min": 1.0,
         "price_pos_max": 1.0,
         "min_signals": 1,
-        "hist_cache_profile_id": _FORMULA_HIST_CACHE,
     },
     "f123_any": {
         "id": "formula_any",
@@ -252,7 +228,6 @@ FORMULA_PROFILES = {
         "amt_ratio_min": 1.0,
         "price_pos_max": 1.0,
         "min_signals": 1,
-        "hist_cache_profile_id": _FORMULA_HIST_CACHE,
     },
 }
 
@@ -271,6 +246,71 @@ def normalize_code(v: Any) -> str:
 # Cache the latest data date so we don't re-query on every computation
 _LATEST_DATA_DATE: Optional[str] = None
 _LATEST_DATA_DATE_LOCK = threading.Lock()
+_CACHE_LOCKS: dict[str, threading.Lock] = {}
+_CACHE_LOCKS_GUARD = threading.Lock()
+
+
+def _cache_lock(profile_id: str) -> threading.Lock:
+    with _CACHE_LOCKS_GUARD:
+        lock = _CACHE_LOCKS.get(profile_id)
+        if lock is None:
+            lock = threading.Lock()
+            _CACHE_LOCKS[profile_id] = lock
+        return lock
+
+
+def _require_source_dbs() -> None:
+    missing = [str(p) for p in (MARKET_DB, SMART_DB) if not p.exists()]
+    if missing:
+        raise FileNotFoundError(
+            "缺少行情数据文件: "
+            + ", ".join(missing)
+            + "。可通过 BESTCHOICE_CHUNKY_DIR / BESTCHOICE_MARKET_DB / BESTCHOICE_SMART_DB 配置路径。"
+        )
+
+
+def _file_fingerprint(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"path": str(path), "exists": False}
+    st = path.stat()
+    return {
+        "path": str(path),
+        "exists": True,
+        "size": st.st_size,
+        "mtime_ns": st.st_mtime_ns,
+    }
+
+
+def _profile_cache_payload(profile: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "id",
+        "strategy_type",
+        "macd_fast",
+        "macd_slow",
+        "macd_signal",
+        "holding_days",
+        "vol_ratio_min",
+        "amt_ratio_min",
+        "price_pos_max",
+        "dif_positive",
+        "min_signals",
+    )
+    return {k: profile.get(k) for k in keys if k in profile}
+
+
+def _cache_signature(profile: dict[str, Any]) -> str:
+    payload = {
+        "schema": 3,
+        "profile": _profile_cache_payload(profile),
+        "holding_periods": HOLDING_PERIODS,
+        "market_db": _file_fingerprint(MARKET_DB),
+        "smart_db": _file_fingerprint(SMART_DB),
+        "latest_data_date": get_latest_data_date(),
+        "optuna_csv": _file_fingerprint(SCRIPTS_DIR / "macd_optuna_top10.csv"),
+        "golden_csv": _file_fingerprint(SCRIPTS_DIR / "macd_gcross_holding_period_summary.csv"),
+    }
+    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 def get_latest_data_date() -> str:
     """Return the latest trading date (cached after first call)."""
@@ -281,6 +321,7 @@ def get_latest_data_date() -> str:
         if _LATEST_DATA_DATE is not None:
             return _LATEST_DATA_DATE
         try:
+            _require_source_dbs()
             con = duckdb.connect(str(MARKET_DB), read_only=True)
             row = con.execute("SELECT MAX(date) FROM v_price_kline_qfq").fetchone()
             con.close()
@@ -390,6 +431,35 @@ def current_status(dif: np.ndarray, dea: np.ndarray, close: np.ndarray) -> tuple
 # 策略加载
 # ---------------------------------------------------------------------------
 def _parse_optuna_profile() -> Optional[dict[str, Any]]:
+    params_path = SCRIPTS_DIR / "macd_optuna_best_params.json"
+    if params_path.exists():
+        try:
+            params = json.loads(params_path.read_text(encoding="utf-8"))
+            combo_key = str(params.get("macd_combo", "S")).strip().upper() or "S"
+            fast = _to_int(params.get("macd_fast"), MACD_COMBOS.get(combo_key, (10, 22, 8))[0])
+            slow = _to_int(params.get("macd_slow"), MACD_COMBOS.get(combo_key, (10, 22, 8))[1])
+            signal = _to_int(params.get("macd_signal"), MACD_COMBOS.get(combo_key, (10, 22, 8))[2])
+            return {
+                "id": "optuna_best",
+                "name": f"Optuna 最优 · EMA({fast}/{slow}/{signal})",
+                "source": "scripts/macd_optuna_best_params.json",
+                "strategy_type": "macd_optuna",
+                "macd_fast": fast,
+                "macd_slow": slow,
+                "macd_signal": signal,
+                "holding_days": _to_int(params.get("holding_days"), 15),
+                "vol_ratio_min": _to_float(params.get("vol_ratio_min")) or 1.0,
+                "amt_ratio_min": _to_float(params.get("amt_ratio_min")) or 1.5,
+                "price_pos_max": _to_float(params.get("price_pos_max")) or 0.60,
+                "dif_positive": bool(params.get("dif_positive", False)),
+                "min_signals": 1,
+                "optuna_score": _to_float(params.get("score")) or 0.0,
+                "optuna_n": _to_int(params.get("signal_count"), 0),
+                "formula_rule_id": "optuna_macd",
+            }
+        except Exception:
+            pass
+
     csv_path = SCRIPTS_DIR / "macd_optuna_top10.csv"
     if not csv_path.exists():
         return None
@@ -421,8 +491,10 @@ def _parse_optuna_profile() -> Optional[dict[str, Any]]:
         "macd_slow": slow,
         "macd_signal": signal,
         "holding_days": _to_int(row.get("holding_days"), 15),
+        "vol_ratio_min": _to_float(row.get("avg_vol_r20")) or 1.0,
         "amt_ratio_min": _to_float(row.get("avg_amt_r20")) or 1.5,
         "price_pos_max": _to_float(row.get("avg_price60")) or 0.60,
+        "dif_positive": False,
         "min_signals": 1,
         "optuna_score": _to_float(row.get("score")) or 0.0,
         "optuna_n": _to_int(row.get("n"), 0),
@@ -544,7 +616,7 @@ def _safe_cache_path(profile_id: str) -> Path:
     return CACHE_DIR / f"cache_{safe}.duckdb"
 
 
-def _cache_fresh(profile_id: str) -> bool:
+def _cache_fresh(profile_id: str, profile: dict[str, Any]) -> bool:
     p = _safe_cache_path(profile_id)
     if not p.exists():
         return False
@@ -554,8 +626,17 @@ def _cache_fresh(profile_id: str) -> bool:
     try:
         con = duckdb.connect(str(p), read_only=True)
         info = con.execute("PRAGMA table_info(hist_metrics)").fetchall()
+        has_horizons = any(r[1] == "horizons_json" for r in info)
+        if not has_horizons:
+            con.close()
+            return False
+        try:
+            row = con.execute("SELECT value FROM cache_manifest WHERE key = 'signature'").fetchone()
+        except Exception:
+            con.close()
+            return False
         con.close()
-        return any(r[1] == "horizons_json" for r in info)
+        return bool(row and row[0] == _cache_signature(profile))
     except Exception:
         return False
 
@@ -610,9 +691,13 @@ def _load_cache(profile_id: str) -> dict[str, dict[str, Any]]:
     return out
 
 
-def _save_cache(profile_id: str, metrics: dict[str, dict[str, Any]]) -> None:
+def _save_cache(profile_id: str, profile: dict[str, Any], metrics: dict[str, dict[str, Any]]) -> None:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
     db = _safe_cache_path(profile_id)
-    con = duckdb.connect(str(db))
+    tmp = db.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp.duckdb")
+    if tmp.exists():
+        tmp.unlink()
+    con = duckdb.connect(str(tmp))
     con.execute("DROP TABLE IF EXISTS hist_metrics")
     con.execute(
         """
@@ -645,7 +730,18 @@ def _save_cache(profile_id: str, metrics: dict[str, dict[str, Any]]) -> None:
         ))
     if rows:
         con.executemany("INSERT INTO hist_metrics VALUES (?,?,?,?,?,?,?,?,?)", rows)
+    con.execute("DROP TABLE IF EXISTS cache_manifest")
+    con.execute("CREATE TABLE cache_manifest (key VARCHAR PRIMARY KEY, value TEXT)")
+    con.executemany(
+        "INSERT INTO cache_manifest VALUES (?, ?)",
+        [
+            ("signature", _cache_signature(profile)),
+            ("created_at", time.strftime("%Y-%m-%d %H:%M:%S")),
+            ("profile_id", profile["id"]),
+        ],
+    )
     con.close()
+    os.replace(tmp, db)
 
 
 # ---------------------------------------------------------------------------
@@ -653,24 +749,38 @@ def _save_cache(profile_id: str, metrics: dict[str, dict[str, Any]]) -> None:
 # ---------------------------------------------------------------------------
 def compute_historical(profile: dict[str, Any], progress_cb=None) -> dict[str, dict[str, Any]]:
     profile_id = profile["id"]
-    cache_pid = profile.get("hist_cache_profile_id", profile_id)
-    if _cache_fresh(cache_pid):
-        return _load_cache(cache_pid)
+    cache_pid = profile_id
+    lock = _cache_lock(cache_pid)
+    with lock:
+        if _cache_fresh(cache_pid, profile):
+            return _load_cache(cache_pid)
 
-    mkt = duckdb.connect(str(MARKET_DB), read_only=True)
-    _attach_smart_db(mkt)
-    raw = mkt.execute(
-        """
-        SELECT k.code, k.low, k.close, k.volume, k.amount
-        FROM v_price_kline_qfq k
-        INNER JOIN sm.dim_active_a_stock s ON k.code = s.stock_code
-        ORDER BY k.code, k.date
-        """
-    ).fetchnumpy()
-    mkt.close()
+        _require_source_dbs()
+        mkt = duckdb.connect(str(MARKET_DB), read_only=True)
+        try:
+            try:
+                _attach_smart_db(mkt)
+                raw = mkt.execute(
+                    """
+                    SELECT k.code, k.low, k.close, k.volume, k.amount
+                    FROM v_price_kline_qfq k
+                    INNER JOIN sm.dim_active_a_stock s ON k.code = s.stock_code
+                    ORDER BY k.code, k.date
+                    """
+                ).fetchnumpy()
+            except duckdb.IOException:
+                raw = mkt.execute(
+                    """
+                    SELECT code, low, close, volume, amount
+                    FROM v_price_kline_qfq
+                    ORDER BY code, date
+                    """
+                ).fetchnumpy()
+        finally:
+            mkt.close()
 
     if len(raw["code"]) == 0:
-        _save_cache(cache_pid, {})
+        _save_cache(cache_pid, profile, {})
         return {}
 
     codes   = raw["code"]
@@ -724,9 +834,9 @@ def compute_historical(profile: dict[str, Any], progress_cb=None) -> dict[str, d
         max_h = max(all_periods)
         for si in sig_idxs:
             buy_i = si + 1          # T+1: 金叉后第一个交易日买入
-            if buy_i >= n or vol[buy_i] <= 0 or amt[buy_i] <= 0:
+            if buy_i >= n or cls[buy_i] <= 0:
                 continue
-            buy_price = float(amt[buy_i] / (vol[buy_i] * 100))
+            buy_price = float(cls[buy_i])
 
             end_i    = min(buy_i + max_h + 1, n)
             lo_slice = lo[buy_i:end_i]
@@ -739,7 +849,7 @@ def compute_historical(profile: dict[str, Any], progress_cb=None) -> dict[str, d
                 sell_price = float(cl_slice[h])
                 hold_low   = float(cum_min[h])
                 r  = (sell_price - buy_price) / buy_price
-                dd = (hold_low   - buy_price) / buy_price
+                dd = min(0.0, (hold_low - buy_price) / buy_price)
                 h_rets[h].append(r)
                 h_dds[h].append(dd)
 
@@ -798,7 +908,7 @@ def compute_historical(profile: dict[str, Any], progress_cb=None) -> dict[str, d
 
         idx += cnt
 
-    _save_cache(cache_pid, metrics)
+    _save_cache(cache_pid, profile, metrics)
     return metrics
 
 
@@ -840,28 +950,46 @@ def _load_formula_hits() -> dict[str, dict[str, bool]]:
 
 def compute_current(meta: dict[str, tuple], profile: dict[str, Any], formula_hits: dict[str, dict[str, bool]]) -> list[dict[str, Any]]:
     mkt = duckdb.connect(str(MARKET_DB), read_only=True)
-    _attach_smart_db(mkt)
-    raw = mkt.execute(
-        """
-        WITH ranked AS (
-            SELECT k.code, k.date, k.close, k.volume, k.amount,
-                   ROW_NUMBER() OVER (PARTITION BY k.code ORDER BY k.date DESC) AS rn
-            FROM v_price_kline_qfq k
-            INNER JOIN sm.dim_active_a_stock s ON k.code = s.stock_code
-        )
-        SELECT code, date, close, volume, amount
-        FROM ranked
-        WHERE rn <= 220
-        ORDER BY code, date
-        """
-    ).fetchnumpy()
-    mkt.close()
+    try:
+        try:
+            _attach_smart_db(mkt)
+            raw = mkt.execute(
+                """
+                WITH ranked AS (
+                    SELECT k.code, k.date, k.low, k.close, k.volume, k.amount,
+                           ROW_NUMBER() OVER (PARTITION BY k.code ORDER BY k.date DESC) AS rn
+                    FROM v_price_kline_qfq k
+                    INNER JOIN sm.dim_active_a_stock s ON k.code = s.stock_code
+                )
+                SELECT code, date, low, close, volume, amount
+                FROM ranked
+                WHERE rn <= 220
+                ORDER BY code, date
+                """
+            ).fetchnumpy()
+        except duckdb.IOException:
+            raw = mkt.execute(
+                """
+                WITH ranked AS (
+                    SELECT code, date, low, close, volume, amount,
+                           ROW_NUMBER() OVER (PARTITION BY code ORDER BY date DESC) AS rn
+                    FROM v_price_kline_qfq
+                )
+                SELECT code, date, low, close, volume, amount
+                FROM ranked
+                WHERE rn <= 220
+                ORDER BY code, date
+                """
+            ).fetchnumpy()
+    finally:
+        mkt.close()
 
     if len(raw["code"]) == 0:
         return []
 
     codes = raw["code"]
     dates = raw["date"]
+    lows = raw["low"].astype(np.float64)
     closes = raw["close"].astype(np.float64)
     volumes = raw["volume"].astype(np.float64)
     amounts = raw["amount"].astype(np.float64)
@@ -879,6 +1007,7 @@ def compute_current(meta: dict[str, tuple], profile: dict[str, Any], formula_hit
         code = normalize_code(code_raw)
         sl = slice(idx, idx + cnt)
         date_arr = dates[sl]
+        lo = lows[sl]
         cls = closes[sl]
         vol = volumes[sl]
         amt = amounts[sl]
@@ -894,12 +1023,17 @@ def compute_current(meta: dict[str, tuple], profile: dict[str, Any], formula_hit
         status, days_ev, gap = current_status(dif, dea, cls)
 
         amt_ma20 = sma_np(amt, 20)
+        vol_ma20 = sma_np(vol, 20)
         max60_arr = rolling_max_np(cls, 60)
+        cur_vol_r20 = float(vol[-1] / vol_ma20[-1]) if (vol_ma20[-1] > 0 and not np.isnan(vol_ma20[-1])) else 0.0
         cur_amt_r20 = float(amt[-1] / amt_ma20[-1]) if (amt_ma20[-1] > 0 and not np.isnan(amt_ma20[-1])) else 0.0
         cur_price60 = float(cls[-1] / max60_arr[-1]) if max60_arr[-1] > 0 else 1.0
+        dif_positive_now = float(dif[-1]) > 0
 
         last_gc_date = None
         sell_hint = None
+        latest_trade_horizons: dict[int, dict[str, Any]] = {}
+        latest_trade_base: dict[str, Any] = {}
         for i in range(1, min(n, 60)):
             if dif[-i] > dea[-i] and (i + 1 <= n) and dif[-(i + 1)] <= dea[-(i + 1)]:
                 last_gc_date = str(date_arr[-i])
@@ -911,6 +1045,57 @@ def compute_current(meta: dict[str, tuple], profile: dict[str, Any], formula_hit
                     sell_hint = "今日为建议卖出日"
                 else:
                     sell_hint = f"已超持股期 {abs(remain)} 天"
+
+                signal_i = n - i
+                buy_i = signal_i + 1
+                latest_trade_base = {
+                    "signal_date": str(date_arr[signal_i]),
+                    "price_mode": "qfq_next_close",
+                }
+                if buy_i < n and cls[buy_i] > 0:
+                    buy_price = float(cls[buy_i])
+                    latest_i = n - 1
+                    latest_price = float(cls[latest_i])
+                    elapsed = latest_i - buy_i
+                    latest_trade_base.update(
+                        {
+                            "buy_date": str(date_arr[buy_i]),
+                            "buy_price": round(buy_price, 3),
+                            "latest_date": str(date_arr[latest_i]),
+                            "latest_price": round(latest_price, 3),
+                            "elapsed_trading_days": int(elapsed),
+                            "latest_ret": round((latest_price - buy_price) / buy_price, 4),
+                        }
+                    )
+                    for hp0 in HOLDING_PERIODS:
+                        target_i = buy_i + hp0
+                        eval_i = min(target_i, latest_i)
+                        eval_price = float(cls[eval_i])
+                        low_slice = lo[buy_i : eval_i + 1]
+                        max_dd = min(0.0, (float(np.min(low_slice)) - buy_price) / buy_price) if len(low_slice) else 0.0
+                        reached = target_i <= latest_i
+                        latest_trade_horizons[hp0] = {
+                            "holding_days": hp0,
+                            "target_sell_date": str(date_arr[target_i]) if reached else None,
+                            "target_sell_price": round(float(cls[target_i]), 3) if reached else None,
+                            "eval_date": str(date_arr[eval_i]),
+                            "eval_price": round(eval_price, 3),
+                            "ret": round((eval_price - buy_price) / buy_price, 4),
+                            "max_dd": round(max_dd, 4),
+                            "reached_target": reached,
+                            "remaining_days": max(0, target_i - latest_i),
+                        }
+                else:
+                    latest_trade_base.update(
+                        {
+                            "buy_date": None,
+                            "buy_price": None,
+                            "latest_date": str(date_arr[-1]),
+                            "latest_price": round(float(cls[-1]), 3),
+                            "elapsed_trading_days": 0,
+                            "latest_ret": None,
+                        }
+                    )
                 break
 
         hits = formula_hits.get(code, {"f1_hit": False, "f3_hit": False, "f5_hit": False})
@@ -935,13 +1120,20 @@ def compute_current(meta: dict[str, tuple], profile: dict[str, Any], formula_hit
                 "cur_dea": round(float(dea[-1]), 6),
                 "cur_close": round(float(cls[-1]), 2),
                 "cur_date": str(date_arr[-1]),
-                "dif_positive": float(dif[-1]) > 0,
+                "dif_positive": dif_positive_now,
+                "cur_vol_r20": round(cur_vol_r20, 2),
                 "cur_amt_r20": round(cur_amt_r20, 2),
                 "cur_price60": round(cur_price60, 3),
-                "filter_pass": (cur_amt_r20 >= float(profile.get("amt_ratio_min", 1.0)))
-                and (cur_price60 <= float(profile.get("price_pos_max", 1.0))),
+                "filter_pass": (
+                    cur_vol_r20 >= float(profile.get("vol_ratio_min", 1.0))
+                    and cur_amt_r20 >= float(profile.get("amt_ratio_min", 1.0))
+                    and cur_price60 <= float(profile.get("price_pos_max", 1.0))
+                    and (not profile.get("dif_positive") or dif_positive_now)
+                ),
                 "last_gc_date": last_gc_date,
                 "sell_hint": sell_hint,
+                "latest_trade": latest_trade_base or None,
+                "latest_trade_horizons": latest_trade_horizons,
                 "f1_hit": hits.get("f1_hit", False),
                 "f3_hit": hits.get("f3_hit", False),
                 "f5_hit": hits.get("f5_hit", False),
@@ -1040,19 +1232,42 @@ class ComputeEngine:
         self._computing: set[str] = set()
 
         self._profiles = get_strategy_profiles()
+        self._default_profile_id = get_default_profile_id(self._profiles)
         start_profile = os.environ.get("BESTCHOICE_START_PROFILE")
         self._active_profile_id = (
-            start_profile if start_profile in self._profiles else get_default_profile_id(self._profiles)
+            start_profile if start_profile in self._profiles else self._default_profile_id
         )
 
     def profiles(self) -> dict[str, dict[str, Any]]:
         return self._profiles
 
     def active_profile_id(self) -> str:
-        return self._active_profile_id
+        with self._lock:
+            return self._active_profile_id
+
+    def default_profile_id(self) -> str:
+        return self._default_profile_id
 
     def active_profile(self) -> dict[str, Any]:
-        return self._profiles[self._active_profile_id]
+        return self._profiles[self.active_profile_id()]
+
+    def ensure_profile(self, profile_id: str, force: bool = False) -> dict[str, Any]:
+        if profile_id not in self._profiles:
+            raise KeyError(profile_id)
+
+        with self._lock:
+            already_done = profile_id in self._data_cache
+            already_computing = profile_id in self._computing
+
+        if force or (not already_done and not already_computing):
+            threading.Thread(
+                target=self.start,
+                args=(profile_id,),
+                kwargs={"force": force},
+                daemon=True,
+            ).start()
+
+        return self._profiles[profile_id]
 
     def set_profile(self, profile_id: str) -> dict[str, Any]:
         if profile_id not in self._profiles:
@@ -1061,7 +1276,6 @@ class ComputeEngine:
         with self._lock:
             self._active_profile_id = profile_id
             already_done = profile_id in self._data_cache
-            already_computing = profile_id in self._computing
 
         if already_done:
             # Serve from cache instantly — no recompute needed
@@ -1073,8 +1287,7 @@ class ComputeEngine:
             with self._lock:
                 self._ready = False
                 self._message = f"计算策略（{self._profiles[profile_id]['name']}）..."
-            if not already_computing:
-                threading.Thread(target=self.start, args=(profile_id,), kwargs={"force": True}, daemon=True).start()
+            self.ensure_profile(profile_id, force=True)
 
         return self._profiles[profile_id]
 
@@ -1085,12 +1298,14 @@ class ComputeEngine:
             "source": profile.get("source", "内置"),
             "macd": f"EMA({profile['macd_fast']}/{profile['macd_slow']}/{profile['macd_signal']})",
             "holding_days": profile["holding_days"],
+            "vol_ratio_min": profile.get("vol_ratio_min", 1.0),
             "amt_ratio_min": profile["amt_ratio_min"],
             "price_pos_max": profile["price_pos_max"],
             "min_signals": profile.get("min_signals", 1),
             "fast": profile["macd_fast"],
             "slow": profile["macd_slow"],
             "signal": profile["macd_signal"],
+            "dif_positive": profile.get("dif_positive", False),
             "strategy_type": profile.get("strategy_type", "macd"),
             "formula_filter_mode": profile.get("formula_filter_mode"),
             "formula_rule_id": profile.get("formula_rule_id"),
@@ -1184,15 +1399,24 @@ class ComputeEngine:
 
     def warmup_all(self) -> None:
         """After default profile is ready, pre-warm all other profiles in the background."""
-        for pid in self._profiles:
-            if pid != self._active_profile_id:
+        profile_ids = [pid for pid in self._profiles if pid != self._default_profile_id]
+
+        def _worker() -> None:
+            while True:
                 with self._lock:
-                    already = pid in self._data_cache or pid in self._computing
-                if not already:
-                    threading.Thread(target=self.start, args=(pid,), kwargs={"force": False}, daemon=True).start()
+                    pending = [
+                        pid for pid in profile_ids
+                        if pid not in self._data_cache and pid not in self._computing
+                    ]
+                if not pending:
+                    return
+                self.start(pending[0], force=False)
+
+        for _ in range(min(MAX_WARMUP_WORKERS, len(profile_ids))):
+            threading.Thread(target=_worker, daemon=True).start()
 
     def start(self, profile_id: str | None = None, force: bool = False, clear_cache: bool = False) -> None:
-        pid = profile_id or self._active_profile_id
+        pid = profile_id or self.active_profile_id()
 
         with self._lock:
             if pid not in self._profiles:
@@ -1210,44 +1434,61 @@ class ComputeEngine:
             self._started = True  # legacy flag
 
         profile = self._profiles[pid]
-        is_active = pid == self._active_profile_id
+        is_active = pid == self.active_profile_id()
         if is_active:
-            self._ready = False
-            self._message = f"准备计算（{profile['name']}）"
+            with self._lock:
+                self._ready = False
+                self._message = f"准备计算（{profile['name']}）"
         t0 = time.time()
 
         if clear_cache:
-            cache_pid_for_hist = profile.get("hist_cache_profile_id", pid)
-            cache_file = _safe_cache_path(cache_pid_for_hist)
+            cache_file = _safe_cache_path(pid)
             if cache_file.exists():
                 cache_file.unlink()
 
         def _msg(m: str) -> None:
             """Only update status message when computing the active profile."""
-            if pid == self._active_profile_id:
-                self._message = m
+            with self._lock:
+                if pid == self._active_profile_id:
+                    self._message = m
 
         try:
             _msg("读取元数据...")
+            _require_source_dbs()
             mkt = duckdb.connect(str(MARKET_DB), read_only=True)
-            _attach_smart_db(mkt)
-            meta_rows = mkt.execute(
-                """
-                SELECT s.stock_code, s.stock_name,
-                       COALESCE(a.tdx_l1_name, '未知') AS industry,
-                       COALESCE(a.stock_archetype, '未知') AS archetype,
-                       COALESCE(f.holder_count_change_pct, 0.0) AS holder_chg_pct
-                FROM sm.dim_active_a_stock s
-                LEFT JOIN sm.dim_stock_archetype_latest a ON s.stock_code = a.stock_code
-                LEFT JOIN sm.dim_financial_latest f ON s.stock_code = f.stock_code
-                """
-            ).fetchall()
-            mkt.close()
+            try:
+                try:
+                    _attach_smart_db(mkt)
+                    meta_rows = mkt.execute(
+                        """
+                        SELECT s.stock_code, s.stock_name,
+                               COALESCE(a.tdx_l1_name, '未知') AS industry,
+                               COALESCE(a.stock_archetype, '未知') AS archetype,
+                               COALESCE(f.holder_count_change_pct, 0.0) AS holder_chg_pct
+                        FROM sm.dim_active_a_stock s
+                        LEFT JOIN sm.dim_stock_archetype_latest a ON s.stock_code = a.stock_code
+                        LEFT JOIN sm.dim_financial_latest f ON s.stock_code = f.stock_code
+                        """
+                    ).fetchall()
+                except duckdb.IOException:
+                    meta_rows = mkt.execute(
+                        """
+                        SELECT DISTINCT code, code AS stock_name,
+                               '未知' AS industry,
+                               '未知' AS archetype,
+                               0.0 AS holder_chg_pct
+                        FROM v_price_kline_qfq
+                        """
+                    ).fetchall()
+            finally:
+                mkt.close()
 
             meta = {normalize_code(code): tuple(row) for code, *row in meta_rows}
 
-            _msg("加载选股公式命中字段...")
-            formula_hits = _load_formula_hits()
+            formula_hits = {}
+            if profile.get("formula_filter_mode"):
+                _msg("加载选股公式命中字段...")
+                formula_hits = _load_formula_hits()
 
             _msg("计算历史回测指标...")
 
@@ -1281,6 +1522,27 @@ class ComputeEngine:
                     row["horizons"]         = {}
                     row["best_holding_days"] = None
 
+                ref_hp = int(row.get("best_holding_days") or profile["holding_days"])
+                latest_trade = row.get("latest_trade") or {}
+                latest_horizons = row.get("latest_trade_horizons") or {}
+                ref_trade = latest_horizons.get(ref_hp) or latest_horizons.get(str(ref_hp)) or {}
+                row["trade_ref_holding_days"] = ref_hp
+                row["trade_signal_date"] = latest_trade.get("signal_date")
+                row["trade_buy_date"] = latest_trade.get("buy_date")
+                row["trade_buy_price"] = latest_trade.get("buy_price")
+                row["trade_latest_date"] = latest_trade.get("latest_date")
+                row["trade_latest_price"] = latest_trade.get("latest_price")
+                row["trade_elapsed_days"] = latest_trade.get("elapsed_trading_days")
+                row["trade_latest_ret"] = latest_trade.get("latest_ret")
+                row["trade_target_sell_date"] = ref_trade.get("target_sell_date")
+                row["trade_target_sell_price"] = ref_trade.get("target_sell_price")
+                row["trade_eval_date"] = ref_trade.get("eval_date")
+                row["trade_eval_price"] = ref_trade.get("eval_price")
+                row["trade_ref_ret"] = ref_trade.get("ret")
+                row["trade_ref_max_dd"] = ref_trade.get("max_dd")
+                row["trade_reached_target"] = ref_trade.get("reached_target")
+                row["trade_remaining_days"] = ref_trade.get("remaining_days")
+
                 # Compute buy-point signal and composite score after merging hist data
                 is_just  = row["status"] == S_JUST
                 days_ev  = row.get("days_event") or 99
@@ -1290,9 +1552,8 @@ class ComputeEngine:
                 has_hist = row["has_history"]
 
                 # is_buy_point: 刚金叉 within 3 days + good history
-                # filter_pass is shown as context but NOT required (too strict as a hard gate)
                 row["is_buy_point"] = bool(
-                    is_just and days_ev <= 3 and has_hist and wr >= 0.48 and cal >= 0.5
+                    is_just and days_ev <= 3 and fp and has_hist and wr >= 0.48 and cal >= 0.5
                 )
 
                 # buy_score: 0-100 composite for ranking today's picks
@@ -1346,6 +1607,7 @@ class ComputeEngine:
                 "params": {
                     "macd": f"EMA({profile['macd_fast']}/{profile['macd_slow']}/{profile['macd_signal']})",
                     "holding_days": profile["holding_days"],
+                    "vol_min": profile.get("vol_ratio_min", 1.0),
                     "amt_min": profile["amt_ratio_min"],
                     "price_max": profile["price_pos_max"],
                     "min_signals": profile.get("min_signals", 1),
@@ -1367,41 +1629,62 @@ class ComputeEngine:
                     self._message = f"就绪（{profile['name']}）耗时 {summary['elapsed']} 秒"
 
             # After the default profile finishes, warm up all others in background
-            if (
-                pid == get_default_profile_id(self._profiles)
-                and os.environ.get("BESTCHOICE_SKIP_WARMUP") != "1"
-            ):
+            if pid == self._default_profile_id and os.environ.get("BESTCHOICE_SKIP_WARMUP") != "1":
                 self.warmup_all()
 
         except Exception as e:  # pragma: no cover
-            self._message = f"计算出错: {e}"
             with self._lock:
+                if pid == self._active_profile_id:
+                    self._message = f"计算出错: {e}"
                 self._ready = False
                 self._computing.discard(pid)
                 self._started = False
             raise
 
-    def restart(self, profile_id: str | None = None, clear_cache: bool = False) -> None:
-        pid = profile_id or self._active_profile_id
+    def restart(self, profile_id: str | None = None, clear_cache: bool = False, activate: bool = True) -> None:
+        pid = profile_id or self.active_profile_id()
         if pid not in self._profiles:
             raise KeyError(pid)
 
-        self._active_profile_id = pid
         # Evict stale in-memory cache for this profile so it recomputes
         with self._lock:
+            if activate:
+                self._active_profile_id = pid
             self._data_cache.pop(pid, None)
-            self._ready = False
+            if pid == self._active_profile_id:
+                self._ready = False
         threading.Thread(target=self.start, args=(pid,), kwargs={"force": True, "clear_cache": clear_cache}, daemon=True).start()
 
-    def status(self) -> dict[str, Any]:
+    def status(self, profile_id: str | None = None) -> dict[str, Any]:
         with self._lock:
             computing = list(self._computing)
+            active = self._active_profile_id
+            ready = self._ready
+            message = self._message
+
+            if profile_id is not None:
+                if profile_id not in self._profiles:
+                    raise KeyError(profile_id)
+                ready = profile_id in self._data_cache
+                if ready:
+                    message = f"就绪（{self._profiles[profile_id]['name']}）"
+                elif profile_id in self._computing:
+                    message = f"计算策略（{self._profiles[profile_id]['name']}）..."
+                else:
+                    message = f"等待计算（{self._profiles[profile_id]['name']}）"
+
         return {
-            "ready": self._ready,
-            "message": self._message,
-            "active_profile_id": self._active_profile_id,
+            "ready": ready,
+            "message": message,
+            "active_profile_id": active,
+            "default_profile_id": self._default_profile_id,
+            "profile_id": profile_id or active,
             "computing_profiles": computing,
         }
 
     def data(self) -> Optional[dict[str, Any]]:
-        return self._data_cache.get(self._active_profile_id)
+        return self.data_for_profile()
+
+    def data_for_profile(self, profile_id: str | None = None) -> Optional[dict[str, Any]]:
+        pid = profile_id or self.active_profile_id()
+        return self._data_cache.get(pid)
