@@ -7,7 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <style>
 :root {
   --bg: #f7f6f3;
@@ -502,11 +501,8 @@ td:nth-child(n+5),
 .inline-detail-card .d-section { margin-bottom: 0; min-width: 0; }
 .inline-detail-card #charts {
   grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  display: block;
 }
-.inline-detail-card #charts .d-section-title { grid-column: 1 / -1; }
 .inline-detail-card .d-grid,
 .inline-detail-card .timing-grid {
   grid-template-columns: repeat(2, minmax(120px, 1fr));
@@ -567,8 +563,54 @@ td:nth-child(n+5),
 .score-bar-bg { height: 5px; border-radius: 3px; background: var(--bg); margin-top: 4px; }
 .score-bar-fill { height: 5px; border-radius: 3px; background: var(--red); transition: width .3s; }
 
-#chart-price, #chart-macd { width: 100%; height: 170px !important; }
-#chart-wrap-macd { margin-top: 0; }
+.chart-stack {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
+  padding: 10px 12px 8px;
+  overflow: hidden;
+}
+.chart-host {
+  width: 100%;
+  height: 320px;
+}
+.macd-combo-chart {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.chart-grid-line {
+  stroke: var(--border);
+  stroke-width: .7;
+  shape-rendering: crispEdges;
+}
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.2;
+}
+.chart-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.legend-line {
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
 
 /* ── Loading overlay ─────────────────────────────── */
 #loading {
@@ -601,7 +643,8 @@ td:nth-child(n+5),
   .main-layout { padding: 8px 10px; }
   .inline-detail-card { grid-template-columns: 1fr; }
   .inline-detail-card #rec-box { grid-column: 1; }
-  .inline-detail-card #charts { grid-template-columns: 1fr; }
+  .chart-host { height: 280px; }
+  .chart-legend { flex-wrap: wrap; gap: 10px 14px; }
 }
 </style>
 </head>
@@ -820,9 +863,16 @@ td:nth-child(n+5),
 
       <!-- MACD chart -->
       <div class="d-section" id="charts">
-        <div class="d-section-title">MACD 走势（最近 90 日）</div>
-        <div id="chart-wrap-price"><canvas id="chart-price"></canvas></div>
-        <div id="chart-wrap-macd"><canvas id="chart-macd"></canvas></div>
+        <div class="d-section-title">MACD 走势 · 近 90 日</div>
+        <div class="chart-stack">
+          <div id="macd-combo-chart" class="chart-host"></div>
+          <div class="chart-legend" aria-hidden="true">
+            <span><i class="legend-line" style="background:#2f6fdd"></i>收盘 / DEA</span>
+            <span><i class="legend-line" style="background:#b07a0a"></i>DIF</span>
+            <span><i class="legend-dot" style="background:#c4332f"></i>金叉</span>
+            <span><i class="legend-dot" style="background:#1f9e6e"></i>死叉</span>
+          </div>
+        </div>
       </div>
 
     </div><!-- /rpanel-detail -->
@@ -898,7 +948,6 @@ const TABLE_COLUMNS = [
 ───────────────────────────────────────────────── */
 let allStocks = [];
 let filtered  = [];
-let chartPrice = null, chartMacd = null;
 let activeRightTab = 'detail';
 let tableSort = { key:'recommendation', dir:1 };
 let activeQuickFilter = 'all';
@@ -1474,8 +1523,8 @@ function selectRow(code) {
    Charts
 ───────────────────────────────────────────────── */
 function destroyCharts() {
-  if (chartPrice) { chartPrice.destroy(); chartPrice=null; }
-  if (chartMacd)  { chartMacd.destroy();  chartMacd=null; }
+  const host = document.getElementById('macd-combo-chart');
+  if (host) host.innerHTML = '';
 }
 
 async function loadChart(code) {
@@ -1483,40 +1532,119 @@ async function loadChart(code) {
   const d = await fetch(`/api/chart/${code}${q}`).then(r=>r.json()).catch(()=>null);
   if (!d||!d.dates||!d.dates.length) return;
   destroyCharts();
-  const labels = d.dates.map(x=>String(x).slice(5));
-  const gc = new Set((d.crosses||[]).filter(c=>c.type==='golden').map(c=>c.idx));
-  const dc = new Set((d.crosses||[]).filter(c=>c.type==='death').map(c=>c.idx));
-  const n = labels.length;
+  renderMacdComboChart(d);
+}
 
-  chartPrice = new Chart(document.getElementById('chart-price').getContext('2d'), {
-    type:'line', data:{labels, datasets:[{
-      label:'收盘价', data:d.close, borderColor:'#3b82f6', borderWidth:1.5, fill:false, tension:0.2,
-      pointRadius:Array.from({length:n},(_,i)=>(gc.has(i)||dc.has(i))?5:0),
-      pointBackgroundColor:Array.from({length:n},(_,i)=>gc.has(i)?'#22c55e':dc.has(i)?'#ef4444':'transparent'),
-      pointStyle:Array.from({length:n},(_,i)=>(gc.has(i)||dc.has(i))?'triangle':'circle'),
-      pointRotation:Array.from({length:n},(_,i)=>dc.has(i)?180:0),
-    }]}, options:chartOpts('¥',false)
-  });
-
-  chartMacd = new Chart(document.getElementById('chart-macd').getContext('2d'), {
-    type:'bar', data:{labels, datasets:[
-      {type:'line',label:'DIF',data:d.dif,borderColor:'#f59e0b',borderWidth:1.5,pointRadius:0,tension:0.2,fill:false},
-      {type:'line',label:'DEA',data:d.dea,borderColor:'#3b82f6',borderWidth:1.5,pointRadius:0,tension:0.2,fill:false},
-      {type:'bar', label:'MACD',data:d.bar,backgroundColor:d.bar.map(v=>v>=0?'rgba(239,68,68,.64)':'rgba(34,197,94,.64)')},
-    ]}, options:{...chartOpts('',true),plugins:{legend:{display:true}}}
+function asFiniteSeries(values, n) {
+  return Array.from({length:n}, (_, i) => {
+    const v = Number(values?.[i]);
+    return Number.isFinite(v) ? v : null;
   });
 }
 
-function chartOpts(prefix, zero) {
-  return {
-    responsive:true, maintainAspectRatio:false, animation:false,
-    interaction:{mode:'index',intersect:false},
-    plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${prefix}${ctx.raw}`}}},
-    scales:{
-      x:{grid:{color:'#e2e8f0'},ticks:{color:'#64748b',maxTicksLimit:10,font:{size:10}}},
-      y:{grid:{color:'#e2e8f0'},ticks:{color:'#64748b',font:{size:10}}},
-    },
-  };
+function finiteValues(values) {
+  return values.filter(v => Number.isFinite(v));
+}
+
+function makeScale(min, max, outMin, outMax) {
+  const span = max - min || Math.max(Math.abs(max), 1);
+  const pad = span * 0.08;
+  const lo = min - pad;
+  const hi = max + pad;
+  return v => outMin + (1 - (v - lo) / (hi - lo || 1)) * (outMax - outMin);
+}
+
+function linePath(values, xAt, yAt) {
+  let path = '';
+  let open = false;
+  values.forEach((v, i) => {
+    if (!Number.isFinite(v)) {
+      open = false;
+      return;
+    }
+    path += `${open ? 'L' : 'M'}${xAt(i).toFixed(1)} ${yAt(v).toFixed(1)} `;
+    open = true;
+  });
+  return path.trim();
+}
+
+function areaPath(values, xAt, yAt, baselineY) {
+  const points = values
+    .map((v, i) => Number.isFinite(v) ? [xAt(i), yAt(v)] : null)
+    .filter(Boolean);
+  if (!points.length) return '';
+  const first = points[0];
+  const last = points[points.length - 1];
+  const top = points.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
+  return `${top} L${last[0].toFixed(1)} ${baselineY.toFixed(1)} L${first[0].toFixed(1)} ${baselineY.toFixed(1)} Z`;
+}
+
+function renderMacdComboChart(data) {
+  const host = document.getElementById('macd-combo-chart');
+  if (!host) return;
+  const n = data.dates?.length || 0;
+  if (!n) {
+    host.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:24px">暂无走势数据</div>';
+    return;
+  }
+
+  const close = asFiniteSeries(data.close, n);
+  const dif = asFiniteSeries(data.dif, n);
+  const dea = asFiniteSeries(data.dea, n);
+  const bar = asFiniteSeries(data.bar, n);
+  const closeVals = finiteValues(close);
+  const macdVals = finiteValues([...dif, ...dea, ...bar, 0]);
+  if (!closeVals.length || !macdVals.length) return;
+
+  const w = 760, h = 320;
+  const pad = {l:18, r:18, t:14, b:12};
+  const priceTop = 18, priceBottom = 150;
+  const macdTop = 178, macdBottom = 288;
+  const plotW = w - pad.l - pad.r;
+  const xAt = i => pad.l + (n === 1 ? 0 : (i / (n - 1)) * plotW);
+  const yPrice = makeScale(Math.min(...closeVals), Math.max(...closeVals), priceTop, priceBottom);
+  const yMacd = makeScale(Math.min(...macdVals), Math.max(...macdVals), macdTop, macdBottom);
+  const pricePath = linePath(close, xAt, yPrice);
+  const priceArea = areaPath(close, xAt, yPrice, priceBottom + 6);
+  const difPath = linePath(dif, xAt, yMacd);
+  const deaPath = linePath(dea, xAt, yMacd);
+  const zeroY = yMacd(0);
+  const barW = Math.max(1.5, Math.min(7, plotW / Math.max(n, 1) * 0.48));
+  const gridX = [0, .2, .4, .6, .8, 1].map(t => pad.l + t * plotW);
+  const gridY = [priceTop, (priceTop + priceBottom) / 2, priceBottom, macdTop, (macdTop + macdBottom) / 2, macdBottom];
+
+  const bars = bar.map((v, i) => {
+    if (!Number.isFinite(v)) return '';
+    const y = yMacd(v);
+    const fill = v >= 0 ? 'rgba(196,51,47,.12)' : 'rgba(31,158,110,.12)';
+    return `<rect x="${(xAt(i)-barW/2).toFixed(1)}" y="${Math.min(y, zeroY).toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.abs(y-zeroY).toFixed(1)}" fill="${fill}"/>`;
+  }).join('');
+
+  const crosses = (data.crosses || []).map(c => {
+    const idx = Number(c.idx);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= n || !Number.isFinite(close[idx])) return '';
+    const isGolden = c.type === 'golden';
+    return `<circle cx="${xAt(idx).toFixed(1)}" cy="${yPrice(close[idx]).toFixed(1)}" r="5.2" fill="${isGolden ? '#c4332f' : '#1f9e6e'}" stroke="#fff" stroke-width="2"/>`;
+  }).join('');
+
+  host.innerHTML = `
+    <svg class="macd-combo-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="MACD 走势近 90 日">
+      <defs>
+        <linearGradient id="priceFillGradient" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#2f6fdd" stop-opacity=".16"/>
+          <stop offset="100%" stop-color="#2f6fdd" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      ${gridX.map(x => `<line class="chart-grid-line" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${priceTop}" y2="${macdBottom}"/>`).join('')}
+      ${gridY.map(y => `<line class="chart-grid-line" x1="${pad.l}" x2="${w-pad.r}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>`).join('')}
+      <path d="${priceArea}" fill="url(#priceFillGradient)"/>
+      <path d="${pricePath}" fill="none" stroke="#2f6fdd" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+      ${crosses}
+      <line x1="${pad.l}" x2="${w-pad.r}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}" stroke="var(--border-strong)" stroke-width=".8"/>
+      ${bars}
+      <path d="${difPath}" fill="none" stroke="#b07a0a" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${deaPath}" fill="none" stroke="#2f6fdd" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
 }
 
 function setDataDateLabel(s) {
