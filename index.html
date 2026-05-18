@@ -184,6 +184,7 @@ body {
 /* ── Table ───────────────────────────────────────── */
 .table-wrap { flex: 1; overflow: auto; min-height: 0; }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+#stock-table { min-width: 1240px; }
 th, td {
   padding: 7px 9px;
   border-bottom: 1px solid var(--border);
@@ -228,84 +229,39 @@ td { font-size: 13px; }
 .cell-code { font-weight: 700; }
 .cell-name { color: var(--muted); font-size: 12px; }
 
-/* ── Pick cards (今日推荐 tab) ──────────────────── */
-#picks-panel {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-  min-height: 0;
-}
-.picks-section-title {
-  font-size: 12px;
+/* ── Unified stock list controls ────────────────── */
+.panel-title {
+  font-size: 13px;
   font-weight: 700;
-  color: var(--text);
-  margin-bottom: 8px;
-  margin-top: 4px;
+}
+.list-hint {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-filters {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
-.picks-section-title .section-badge {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 99px;
-  background: var(--green-bg);
-  color: var(--green);
-}
-.picks-section-title .section-badge.watch {
-  background: var(--yellow-bg);
-  color: var(--yellow);
-}
-.picks-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
-  margin-bottom: 16px;
-}
-.pick-card {
+.quick-chip {
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  cursor: pointer;
-  transition: box-shadow .15s, transform .1s;
-  border-left: 4px solid var(--border);
-  position: relative;
-}
-.pick-card:hover { box-shadow: 0 4px 18px rgba(15,23,42,.12); transform: translateY(-1px); }
-.pick-card.score-high  { border-left-color: var(--green); }
-.pick-card.score-mid   { border-left-color: var(--yellow); }
-.pick-card.score-low   { border-left-color: var(--muted); }
-.pick-card .pc-header  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.pick-card .pc-code    { font-weight: 700; font-size: 14px; }
-.pick-card .pc-name    { color: var(--muted); font-size: 11px; margin-top: 1px; }
-.pick-card .pc-score   {
-  font-size: 11px; font-weight: 700; padding: 2px 7px;
-  border-radius: 99px; background: var(--green-bg); color: var(--green);
-}
-.pick-card.score-mid .pc-score  { background: var(--yellow-bg); color: var(--yellow); }
-.pick-card.score-low .pc-score  { background: var(--gray-bg);   color: var(--muted); }
-.pick-card .pc-metrics {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 3px 6px;
-  margin-top: 6px;
-}
-.pick-card .pc-m { display: flex; flex-direction: column; }
-.pick-card .pc-ml { font-size: 10px; color: var(--muted); }
-.pick-card .pc-mv { font-size: 12px; font-weight: 600; }
-.pick-card .pc-footer {
-  margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--border);
-  font-size: 11px; color: var(--muted);
-  display: flex; align-items: center; gap: 5px;
-}
-.pick-empty {
-  text-align: center;
-  padding: 40px 20px;
+  background: #fbfdff;
   color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font: 600 12px/1.2 inherit;
 }
-.pick-empty .pe-icon { font-size: 32px; margin-bottom: 8px; }
-.pick-empty .pe-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.quick-chip:hover { background: var(--bg); color: var(--text); }
+.quick-chip.active {
+  border-color: rgba(59,130,246,.35);
+  background: var(--blue-bg);
+  color: var(--blue);
+}
 
 /* ── Horizon table ───────────────────────────────── */
 .horizon-table {
@@ -452,29 +408,28 @@ td { font-size: 13px; }
 <!-- Main layout -->
 <div class="main-layout">
 
-  <!-- LEFT: tabbed panel -->
+  <!-- LEFT: unified stock list -->
   <div class="panel">
-    <!-- Left tabs -->
     <div class="tab-strip">
-      <button class="tab-btn active" data-ltab="picks"  onclick="switchLeftTab('picks')">今日推荐</button>
-      <button class="tab-btn"        data-ltab="signal" onclick="switchLeftTab('signal')">信号台</button>
-      <button class="tab-btn"        data-ltab="hist"   onclick="switchLeftTab('hist')">历史绩效</button>
+      <span class="panel-title">全部股票</span>
+      <span class="list-hint" id="list-hint">按信号、买点验证和历史绩效合并排序</span>
       <div class="tab-sep"></div>
       <span class="count-label" id="count-label"></span>
     </div>
 
-    <!-- Toolbar (hidden in picks tab) -->
     <div class="toolbar" id="table-toolbar">
+      <div class="quick-filters" id="quick-filters">
+        <button class="quick-chip active" data-qf="all" onclick="setQuickFilter('all')">全部</button>
+        <button class="quick-chip" data-qf="today" onclick="setQuickFilter('today')">今日推荐</button>
+        <button class="quick-chip" data-qf="just" onclick="setQuickFilter('just')">刚金叉</button>
+        <button class="quick-chip" data-qf="near" onclick="setQuickFilter('near')">即将金叉</button>
+        <button class="quick-chip" data-qf="holding" onclick="setQuickFilter('holding')">持仓期</button>
+        <button class="quick-chip" data-qf="history" onclick="setQuickFilter('history')">历史有效</button>
+      </div>
       <input id="global-search" class="filter-input" placeholder="搜索 代码/名称/行业/风格" oninput="applyFilters()">
       <button class="btn" onclick="resetFilters()">清空筛选</button>
     </div>
 
-    <!-- Picks panel -->
-    <div id="picks-panel" style="display:none">
-      <!-- content populated by renderPicks() -->
-    </div>
-
-    <!-- Table panel -->
     <div class="table-wrap" id="table-panel">
       <table id="stock-table">
         <thead>
@@ -665,33 +620,22 @@ const METRIC_HELP = {
   trade_ref_holding_days:{ desc:'该股票历史Calmar最高的持仓周期，用于最近买点验证' },
 };
 
-/* ── Signal tab columns ── */
-const SIGNAL_COLUMNS = [
+/* ── Unified stock list columns ── */
+const TABLE_COLUMNS = [
+  { key:'recommendation',    label:'建议',    filterType:'select', options:()=>['','今日推荐','买入窗口','提前关注','持仓观察','风险提示','等待'], width:82, display:r=>renderRecommendationCell(r) },
   { key:'status',            label:'状态',    filterType:'select',       options:()=>['','刚金叉','即将金叉','持仓期','刚死叉','等待'], width:86 },
   { key:'code',              label:'代码',    filterType:'text',          width:70, display:r=>`<span class="cell-code">${r.code}</span>` },
   { key:'name',              label:'名称',    filterType:'text',          width:100, display:r=>`<span class="cell-name">${r.name||''}</span>` },
-  { key:'win_rate',          label:'胜率',    filterType:'number', filterScale:100, width:64, display:r=>fmtPct(r.win_rate,1,'—') },
-  { key:'avg_ret',           label:'均收益',  filterType:'number', filterScale:100, width:72, display:r=>fmtSignedPct(r.avg_ret,2,'—') },
-  { key:'avg_dd',            label:'均回撤',  filterType:'number', filterScale:100, width:72, display:r=>fmtSignedPct(r.avg_dd,2,'—') },
-  { key:'calmar',            label:'Calmar',  filterType:'number',        width:66, display:r=>fmtNum(r.calmar,2,'—') },
-  { key:'is_buy_point',      label:'买点',    filterType:'bool',          width:48, display:r=>r.is_buy_point?'<span style="color:var(--gold);font-size:14px">★</span>':'—' },
-  { key:'trade_ref_holding_days', label:'参考周期',filterType:'number',  width:72, display:r=>r.trade_ref_holding_days!=null?`${r.trade_ref_holding_days}天`:'—' },
+  { key:'trade_ref_holding_days', label:'周期',filterType:'number',       width:58, display:r=>r.trade_ref_holding_days!=null?`${r.trade_ref_holding_days}天`:'—' },
   { key:'trade_buy_price',   label:'买入价',  filterType:'number',        width:72, display:r=>r.trade_buy_price!=null?`¥${fmtNum(r.trade_buy_price,2,'—')}`:'—' },
   { key:'trade_eval_price',  label:'卖/最新价',filterType:'number',       width:78, display:r=>r.trade_eval_price!=null?`¥${fmtNum(r.trade_eval_price,2,'—')}`:'—' },
   { key:'trade_ref_ret',     label:'验证收益',filterType:'number', filterScale:100, width:78, display:r=>fmtSignedPct(r.trade_ref_ret,2,'—') },
-  { key:'sell_hint_display', label:'持仓提示',filterType:'text',          width:130, display:r=>renderSellHintCell(r) },
-];
-
-/* ── History tab columns ── */
-const HIST_COLUMNS = [
-  { key:'code',              label:'代码',    filterType:'text',          width:70, display:r=>`<span class="cell-code">${r.code}</span>` },
-  { key:'name',              label:'名称',    filterType:'text',          width:100, display:r=>`<span class="cell-name">${r.name||''}</span>` },
+  { key:'win_rate',          label:'胜率',    filterType:'number', filterScale:100, width:76, display:r=>fmtPct(r.win_rate,2,'—') },
+  { key:'avg_ret',           label:'均收益',  filterType:'number', filterScale:100, width:80, display:r=>fmtSignedPct(r.avg_ret,2,'—') },
+  { key:'avg_dd',            label:'均回撤',  filterType:'number', filterScale:100, width:80, display:r=>fmtSignedPct(r.avg_dd,2,'—') },
+  { key:'calmar',            label:'Calmar',  filterType:'number',        width:76, display:r=>fmtNum(r.calmar,2,'—') },
   { key:'signal_count',      label:'信号数',  filterType:'number',        width:60 },
-  { key:'win_rate',          label:'胜率',    filterType:'number', filterScale:100, width:64, display:r=>fmtPct(r.win_rate,1,'—') },
-  { key:'avg_ret',           label:'均收益',  filterType:'number', filterScale:100, width:72, display:r=>fmtSignedPct(r.avg_ret,2,'—') },
-  { key:'avg_dd',            label:'均回撤',  filterType:'number', filterScale:100, width:72, display:r=>fmtSignedPct(r.avg_dd,2,'—') },
-  { key:'calmar',            label:'Calmar',  filterType:'number',        width:66, display:r=>fmtNum(r.calmar,2,'—') },
-  { key:'best_holding_days', label:'最优持仓期',filterType:'number',      width:84, display:r=>r.best_holding_days!=null?`${r.best_holding_days}天`:'—' },
+  { key:'sell_hint_display', label:'提示',    filterType:'text',          width:118, display:r=>renderSellHintCell(r) },
   { key:'history_status',    label:'历史状态',filterType:'select', options:()=>['',...Object.values(HISTORY_STATUS_LABELS)], width:90 },
 ];
 
@@ -701,23 +645,16 @@ const HIST_COLUMNS = [
 let allStocks = [];
 let filtered  = [];
 let chartPrice = null, chartMacd = null;
-let activeLeftTab  = 'picks';
 let activeRightTab = 'params';
-let tabSort = {
-  signal: { key:'status', dir:1 },
-  hist:   { key:'calmar', dir:-1 },
-};
+let tableSort = { key:'recommendation', dir:1 };
+let activeQuickFilter = 'all';
 let selectedCode = '';
 let pollTimer = null;
 let selectedProfileId = '';
 let profileMap = {};
 
-function getCols() {
-  if (activeLeftTab === 'signal') return SIGNAL_COLUMNS;
-  if (activeLeftTab === 'hist')   return HIST_COLUMNS;
-  return SIGNAL_COLUMNS;
-}
-function getSort() { return tabSort[activeLeftTab] || tabSort.signal; }
+function getCols() { return TABLE_COLUMNS; }
+function getSort() { return tableSort; }
 
 /* ─────────────────────────────────────────────────
    Formatters
@@ -726,7 +663,7 @@ function fmtNum(v, d=2, na='—') {
   if (v==null||v===''||Number.isNaN(v)) return na;
   const n=Number(v); return Number.isFinite(n)?n.toFixed(d):na;
 }
-function fmtPct(v, d=1, na='—') {
+function fmtPct(v, d=2, na='—') {
   if (v==null||v===''||Number.isNaN(v)) return na;
   const n=Number(v); return Number.isFinite(n)?(n*100).toFixed(d)+'%':na;
 }
@@ -748,6 +685,25 @@ function histStatusText(r) {
   return HISTORY_STATUS_LABELS[histStatusCode(r)] || '—';
 }
 
+function recommendationLabel(r) {
+  if (r.is_buy_point) return '今日推荐';
+  if (r.status === '刚金叉') return '买入窗口';
+  if (r.status === '即将金叉') return '提前关注';
+  if (r.status === '持仓期') return '持仓观察';
+  if (r.status === '刚死叉') return '风险提示';
+  return '等待';
+}
+
+function renderRecommendationCell(r) {
+  const label = recommendationLabel(r);
+  if (label === '今日推荐') return '<span class="badge badge-gold">今日推荐</span>';
+  if (label === '买入窗口') return '<span class="badge badge-green">买入窗口</span>';
+  if (label === '提前关注') return '<span class="badge badge-yellow">提前关注</span>';
+  if (label === '持仓观察') return '<span class="badge badge-blue">持仓观察</span>';
+  if (label === '风险提示') return '<span class="badge badge-red">风险提示</span>';
+  return '<span class="badge badge-gray">等待</span>';
+}
+
 function renderSellHintCell(r) {
   if (r.status === '持仓期' && r.sell_hint) {
     return `<span style="font-size:11px;color:var(--blue)">${r.sell_hint}</span>`;
@@ -765,8 +721,9 @@ function renderSellHintCell(r) {
    KPI Cards
 ───────────────────────────────────────────────── */
 function buildCards(s) {
+  const pickSub = (s.today_picks||0) > 0 ? '量价+历史同时达标' : '暂无同时达标买点';
   const items = [
-    { label:'今日推荐', v:s.today_picks||0,  cls:'c-gold',   sub:'强烈推荐买点' },
+    { label:'今日推荐', v:s.today_picks||0,  cls:'c-gold',   sub:pickSub },
     { label:'刚金叉',   v:s.just_cross||0,   cls:'c-green',  sub:'窗口内（≤5天）' },
     { label:'即将金叉', v:s.imminent||0,     cls:'c-yellow', sub:'预计5天内穿越' },
     { label:'持仓期',   v:s.holding||0,      cls:'c-blue',   sub:'已金叉待持仓' },
@@ -794,8 +751,13 @@ function buildParamPanel(d) {
     document.getElementById('data-date').textContent = `数据至 ${d.latest_data_date}`;
   }
   document.getElementById('param-panel').innerHTML = Object.entries(params).map(([k,v]) => {
-    const val = Array.isArray(v.value) ? v.value.join(' / ') : v.value;
-    const vt  = typeof val==='number' ? String(val) : (val||'-');
+    const formatParamValue = val => {
+      if (typeof val !== 'number') return val || '-';
+      return Number.isInteger(val) ? String(val) : val.toFixed(2);
+    };
+    const vt = Array.isArray(v.value)
+      ? v.value.map(formatParamValue).join(' / ')
+      : formatParamValue(v.value);
     return `<div class="param-card">
       <div class="param-name">${v.label}</div>
       <div class="param-value">${vt}</div>
@@ -808,115 +770,11 @@ function buildParamPanel(d) {
 /* ─────────────────────────────────────────────────
    Tab switching
 ───────────────────────────────────────────────── */
-function switchLeftTab(tab) {
-  activeLeftTab = tab;
-  document.querySelectorAll('[data-ltab]').forEach(b => b.classList.toggle('active', b.dataset.ltab===tab));
-
-  const picksPanel  = document.getElementById('picks-panel');
-  const tablePanel  = document.getElementById('table-panel');
-  const toolbar     = document.getElementById('table-toolbar');
-
-  if (tab === 'picks') {
-    picksPanel.style.display  = '';
-    tablePanel.style.display  = 'none';
-    toolbar.style.display     = 'none';
-    renderPicks();
-    document.getElementById('count-label').textContent = '';
-  } else {
-    picksPanel.style.display  = 'none';
-    tablePanel.style.display  = '';
-    toolbar.style.display     = '';
-    renderHeader();
-    applyFilters();
-  }
-}
-
 function switchRightTab(tab) {
   activeRightTab = tab;
   document.querySelectorAll('[data-rtab]').forEach(b => b.classList.toggle('active', b.dataset.rtab===tab));
   document.getElementById('rpanel-params').style.display = tab==='params' ? '' : 'none';
   document.getElementById('rpanel-detail').style.display = tab==='detail' ? '' : 'none';
-}
-
-/* ─────────────────────────────────────────────────
-   Today's picks rendering
-───────────────────────────────────────────────── */
-function scoreClass(score) {
-  if (score >= 60) return 'score-high';
-  if (score >= 35) return 'score-mid';
-  return 'score-low';
-}
-
-function buildPickCard(s) {
-  const sc = scoreClass(s.buy_score || 0);
-  const wr  = s.win_rate  != null ? fmtPct(s.win_rate, 1) : '—';
-  const ar  = s.avg_ret   != null ? `${(s.avg_ret*100).toFixed(1)}%` : '—';
-  const ad  = s.avg_dd    != null ? `${(s.avg_dd*100).toFixed(1)}%`  : '—';
-  const cal = s.calmar    != null ? Number(s.calmar).toFixed(2) : '—';
-  const badge = STATUS_BADGE[s.status] || s.status;
-  const fp = s.filter_pass ? '<span style="color:var(--green);font-size:10px">量价OK</span>' : '';
-  let footer = '';
-  if (s.status === '持仓期' && s.sell_hint) {
-    footer = s.sell_hint;
-  } else if (s.status === '刚金叉' && s.days_event != null) {
-    footer = `金叉 ${s.days_event} 天`;
-  } else if (s.status === '即将金叉' && s.days_event != null) {
-    footer = `预计 ${s.days_event} 天金叉`;
-  }
-  return `<div class="pick-card ${sc}" onclick="selectRowFromPick('${s.code}')">
-    <div class="pc-header">
-      <div>
-        <div class="pc-code">${s.code}</div>
-        <div class="pc-name">${s.name||''}</div>
-      </div>
-      <span class="pc-score">${s.buy_score!=null?s.buy_score:0}</span>
-    </div>
-    <div>${badge} ${fp}</div>
-    <div class="pc-metrics">
-      <div class="pc-m"><span class="pc-ml">胜率</span><span class="pc-mv">${wr}</span></div>
-      <div class="pc-m"><span class="pc-ml">均收益</span><span class="pc-mv">${ar}</span></div>
-      <div class="pc-m"><span class="pc-ml">均回撤</span><span class="pc-mv">${ad}</span></div>
-      <div class="pc-m"><span class="pc-ml">Calmar</span><span class="pc-mv">${cal}</span></div>
-    </div>
-    ${footer?`<div class="pc-footer">${footer}</div>`:''}
-  </div>`;
-}
-
-function renderPicks() {
-  const panel = document.getElementById('picks-panel');
-  const strong = allStocks.filter(s => s.is_buy_point);
-  const watch  = allStocks.filter(s => s.status === '刚金叉' && !s.is_buy_point);
-
-  let html = '';
-
-  if (strong.length === 0 && watch.length === 0) {
-    html = `<div class="pick-empty">
-      <div class="pe-icon">📭</div>
-      <div class="pe-title">暂无符合条件的今日买点</div>
-      <div style="color:var(--muted);font-size:12px;margin-top:4px">
-        可关注「信号台」中的即将金叉股票，提前布局。
-      </div>
-    </div>`;
-  } else {
-    if (strong.length > 0) {
-      html += `<div class="picks-section-title">强烈推荐 <span class="section-badge">${strong.length} 只</span></div>`;
-      html += `<div class="picks-grid">${strong.map(buildPickCard).join('')}</div>`;
-    }
-    if (watch.length > 0) {
-      html += `<div class="picks-section-title">近期关注 <span class="section-badge watch">${watch.length} 只</span></div>`;
-      const watchSorted = [...watch].sort((a,b)=>(b.buy_score||0)-(a.buy_score||0));
-      html += `<div class="picks-grid">${watchSorted.map(buildPickCard).join('')}</div>`;
-    }
-  }
-  panel.innerHTML = html;
-}
-
-function selectRowFromPick(code) {
-  selectedCode = code;
-  // Switch to detail
-  switchRightTab('detail');
-  const row = allStocks.find(x=>x.code===code);
-  if (row) fillDetail(row);
 }
 
 /* ─────────────────────────────────────────────────
@@ -958,8 +816,8 @@ function renderHeader() {
     th.addEventListener('click', () => {
       const key = th.dataset.sort;
       const s = getSort();
-      if (s.key===key) tabSort[activeLeftTab].dir = -s.dir;
-      else tabSort[activeLeftTab] = {key, dir:1};
+      if (s.key===key) tableSort.dir = -s.dir;
+      else tableSort = {key, dir:1};
       renderTable();
       document.querySelectorAll('#header-row th[data-sort] .sort-arrow').forEach(a => {
         const k = a.closest('th').dataset.sort;
@@ -993,6 +851,7 @@ function readFilters() {
 }
 
 function getCellVal(row, key) {
+  if (key==='recommendation')    return recommendationLabel(row);
   if (key==='dif_positive')     return row.dif_positive?'上方':'下方';
   if (key==='history_status')   return histStatusText(row);
   if (key==='sell_hint_display') return row.sell_hint||'';
@@ -1000,7 +859,17 @@ function getCellVal(row, key) {
   return row[key];
 }
 
+function passQuickFilter(row) {
+  if (activeQuickFilter === 'today') return !!row.is_buy_point;
+  if (activeQuickFilter === 'just') return row.status === '刚金叉';
+  if (activeQuickFilter === 'near') return row.status === '即将金叉';
+  if (activeQuickFilter === 'holding') return row.status === '持仓期';
+  if (activeQuickFilter === 'history') return histStatusCode(row) === 'ok';
+  return true;
+}
+
 function passFilter(row, filters) {
+  if (!passQuickFilter(row)) return false;
   const g = filters._global;
   if (g) {
     const hay = `${row.code||''} ${row.name||''} ${row.industry||''} ${row.archetype||''}`.toLowerCase();
@@ -1045,7 +914,11 @@ function passFilter(row, filters) {
 function comparator(a, b) {
   const {key, dir} = getSort();
   let va, vb;
-  if (key==='status')         { va=STATUS_ORDER[a.status]||99; vb=STATUS_ORDER[b.status]||99; }
+  if (key==='recommendation') {
+    const order = {'今日推荐':1,'买入窗口':2,'提前关注':3,'持仓观察':4,'风险提示':5,'等待':6};
+    va=order[recommendationLabel(a)]||99; vb=order[recommendationLabel(b)]||99;
+  }
+  else if (key==='status')         { va=STATUS_ORDER[a.status]||99; vb=STATUS_ORDER[b.status]||99; }
   else if (key==='history_status') { va=HISTORY_STATUS_ORDER[histStatusCode(a)]||99; vb=HISTORY_STATUS_ORDER[histStatusCode(b)]||99; }
   else if (key==='dif_positive')   { va=a.dif_positive?1:0; vb=b.dif_positive?1:0; }
   else if (key==='is_buy_point')   { va=a.is_buy_point?1:0; vb=b.is_buy_point?1:0; }
@@ -1063,8 +936,29 @@ function applyFilters() {
   const filters = readFilters();
   filtered = allStocks.filter(r=>passFilter(r,filters));
   filtered.sort(comparator);
+  updateListHint();
   document.getElementById('count-label').textContent = `显示 ${filtered.length} / ${allStocks.length} 条`;
   renderTable();
+}
+
+function setQuickFilter(name) {
+  activeQuickFilter = name;
+  document.querySelectorAll('[data-qf]').forEach(b => b.classList.toggle('active', b.dataset.qf===name));
+  applyFilters();
+}
+
+function updateListHint() {
+  const counts = {
+    today: allStocks.filter(s=>s.is_buy_point).length,
+    just: allStocks.filter(s=>s.status==='刚金叉').length,
+    near: allStocks.filter(s=>s.status==='即将金叉').length,
+    holding: allStocks.filter(s=>s.status==='持仓期').length,
+    history: allStocks.filter(s=>histStatusCode(s)==='ok').length,
+  };
+  const hint = activeQuickFilter === 'today' && counts.today === 0
+    ? '今日推荐为 0：当前没有同时满足金叉、量价过滤、历史胜率和Calmar阈值的股票'
+    : `今日推荐 ${counts.today} · 刚金叉 ${counts.just} · 即将金叉 ${counts.near} · 持仓期 ${counts.holding} · 历史有效 ${counts.history}`;
+  document.getElementById('list-hint').textContent = hint;
 }
 
 /* ─────────────────────────────────────────────────
@@ -1072,7 +966,7 @@ function applyFilters() {
 ───────────────────────────────────────────────── */
 function renderTable() {
   const tbody = document.getElementById('tbody');
-  tbody.innerHTML = filtered.slice(0,500).map(s =>
+  tbody.innerHTML = filtered.map(s =>
     `<tr data-code="${s.code}" onclick="selectRow('${s.code}')">
       ${getCols().map(c=>`<td title="${String(getCellVal(s,c.key)||'').replace(/"/g,'&quot;')}">${renderCell(c,s)}</td>`).join('')}
     </tr>`
@@ -1085,6 +979,7 @@ function renderTable() {
 
 function renderCell(c, row) {
   if (c.display) return c.display(row);
+  if (c.key==='recommendation') return renderRecommendationCell(row);
   if (c.key==='status')         return STATUS_BADGE[row.status]||row.status||'—';
   if (c.key==='dif_positive')   return row.dif_positive?'上方':'下方';
   if (c.key==='history_status') return histStatusText(row);
@@ -1103,6 +998,8 @@ function renderCell(c, row) {
    Filter helpers
 ───────────────────────────────────────────────── */
 function resetFilters() {
+  activeQuickFilter = 'all';
+  document.querySelectorAll('[data-qf]').forEach(b => b.classList.toggle('active', b.dataset.qf==='all'));
   getCols().forEach(c => {
     if (c.filterType==='number') {
       const op=fkey(c.key,'op'); const vl=fkey(c.key,'val');
@@ -1123,7 +1020,7 @@ function setRecommendation(s) {
   if (s.is_buy_point) {
     box.className='rec-box rec-buy';
     document.getElementById('rec-title').textContent='强烈推荐买入';
-    document.getElementById('rec-desc').textContent=`金叉${s.days_event||'-'}天，量价过滤通过，历史胜率${s.win_rate!=null?(s.win_rate*100).toFixed(0)+'%':'未知'}，综合评分${s.buy_score||0}分。`;
+    document.getElementById('rec-desc').textContent=`金叉${s.days_event||'-'}天，量价过滤通过，历史胜率${s.win_rate!=null?(s.win_rate*100).toFixed(2)+'%':'未知'}，综合评分${s.buy_score||0}分。`;
   } else if (s.status==='刚金叉') {
     box.className='rec-box rec-buy';
     document.getElementById('rec-title').textContent='买入窗口';
@@ -1163,7 +1060,7 @@ function fillHorizonTable(row) {
     if (!hm) {
       return `<tr class="${cls}"><td>${h}</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>`;
     }
-    const wr  = hm.win_rate  != null ? (hm.win_rate*100).toFixed(1)+'%' : '—';
+    const wr  = hm.win_rate  != null ? (hm.win_rate*100).toFixed(2)+'%' : '—';
     const ar  = hm.avg_ret   != null ? (hm.avg_ret >0?'+':'')+(hm.avg_ret*100).toFixed(2)+'%' : '—';
     const ad  = hm.avg_dd    != null ? (hm.avg_dd*100).toFixed(2)+'%' : '—';
     const cal = hm.calmar    != null ? Number(hm.calmar).toFixed(2) : '—';
@@ -1220,17 +1117,17 @@ function fillDetail(row) {
   // 当前状态
   document.getElementById('d-code').textContent    = `${row.code} ${row.name||''}`;
   document.getElementById('d-status').innerHTML    = STATUS_BADGE[row.status]||row.status||'—';
-  document.getElementById('d-dif').textContent     = row.cur_dif!=null?row.cur_dif.toFixed(4):'—';
-  document.getElementById('d-dea').textContent     = row.cur_dea!=null?row.cur_dea.toFixed(4):'—';
+  document.getElementById('d-dif').textContent     = row.cur_dif!=null?row.cur_dif.toFixed(2):'—';
+  document.getElementById('d-dea').textContent     = row.cur_dea!=null?row.cur_dea.toFixed(2):'—';
   document.getElementById('d-close').textContent   = row.cur_close!=null?`¥${row.cur_close.toFixed(2)}`:'—';
-  document.getElementById('d-gap').textContent     = row.gap!=null?row.gap.toFixed(6):'—';
+  document.getElementById('d-gap').textContent     = row.gap!=null?row.gap.toFixed(2):'—';
   document.getElementById('d-amtr').textContent    = row.cur_amt_r20!=null?`${row.cur_amt_r20.toFixed(2)}x`:'—';
-  document.getElementById('d-price60').textContent = row.cur_price60!=null?`${(row.cur_price60*100).toFixed(0)}%`:'—';
+  document.getElementById('d-price60').textContent = row.cur_price60!=null?`${(row.cur_price60*100).toFixed(2)}%`:'—';
 
   // 标的信息
   document.getElementById('d-ind').textContent     = row.industry||'—';
   document.getElementById('d-type').textContent    = row.archetype||'—';
-  document.getElementById('d-hchg').textContent    = row.holder_chg!=null?`${(row.holder_chg*100).toFixed(1)}%`:'—';
+  document.getElementById('d-hchg').textContent    = row.holder_chg!=null?`${(row.holder_chg*100).toFixed(2)}%`:'—';
   document.getElementById('d-lgc').textContent     = row.last_gc_date||'—';
   document.getElementById('d-f1').textContent      = row.f1_hit?'是':'否';
   document.getElementById('d-f3').textContent      = row.f3_hit?'是':'否';
@@ -1331,12 +1228,8 @@ async function loadData() {
   selectedProfileId = d.profile_id||selectedProfileId;
   buildCards(d.summary||{});
   buildParamPanel(d);
-  // Refresh whichever left tab is active
-  if (activeLeftTab === 'picks') {
-    renderPicks();
-  } else {
-    applyFilters();
-  }
+  renderHeader();
+  applyFilters();
   // Re-fill detail if a stock was selected
   if (selectedCode) {
     const row = allStocks.find(x=>x.code===selectedCode);
@@ -1399,10 +1292,7 @@ async function bootstrap() {
   profileMap = strategies.profiles||{};
   selectedProfileId = strategies.active_profile_id||Object.keys(profileMap)[0];
   fillStrategySelect(profileMap, selectedProfileId);
-  // Init left panel: picks tab is default
-  document.getElementById('table-toolbar').style.display = 'none';
-  document.getElementById('picks-panel').style.display   = '';
-  document.getElementById('table-panel').style.display   = 'none';
+  renderHeader();
   pollStatus();
 }
 
