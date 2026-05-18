@@ -142,7 +142,7 @@ body {
 .cards-row {
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 0;
   padding: 0 18px;
   background: var(--surface);
@@ -469,7 +469,7 @@ td { font-size: 13px; }
 @media (max-width: 1100px) {
   .main-layout { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
   .right-panel { max-height: 340px; }
-  .cards-row   { grid-template-columns: repeat(5, 1fr); }
+  .cards-row   { grid-template-columns: repeat(4, 1fr); }
 }
 @media (max-width: 900px) {
   .cards-row   { grid-template-columns: repeat(3, 1fr); }
@@ -522,7 +522,8 @@ td { font-size: 13px; }
     <div class="toolbar" id="table-toolbar">
       <div class="toolbar-row quick-filters" id="quick-filters">
         <button class="quick-chip active" data-qf="all" onclick="setQuickFilter('all')">全部</button>
-        <button class="quick-chip" data-qf="today" onclick="setQuickFilter('today')">今日推荐</button>
+        <button class="quick-chip" data-qf="candidate" onclick="setQuickFilter('candidate')">今日候选</button>
+        <button class="quick-chip" data-qf="strong" onclick="setQuickFilter('strong')">强推荐</button>
         <button class="quick-chip" data-qf="just" onclick="setQuickFilter('just')">刚金叉</button>
         <button class="quick-chip" data-qf="near" onclick="setQuickFilter('near')">即将金叉</button>
         <button class="quick-chip" data-qf="holding" onclick="setQuickFilter('holding')">持仓期</button>
@@ -760,7 +761,7 @@ const METRIC_HELP = {
 
 /* ── Unified stock list columns ── */
 const TABLE_COLUMNS = [
-  { key:'recommendation',    label:'建议',    filterType:'select', options:()=>['','今日推荐','买入窗口','提前关注','持仓观察','风险提示','等待'], width:82, display:r=>renderRecommendationCell(r) },
+  { key:'recommendation',    label:'建议',    filterType:'select', options:()=>['','强推荐','今日候选','买入窗口','提前关注','持仓观察','风险提示','等待'], width:82, display:r=>renderRecommendationCell(r) },
   { key:'status',            label:'状态',    filterType:'select',       options:()=>['','刚金叉','即将金叉','持仓期','刚死叉','等待'], width:86 },
   { key:'code',              label:'代码',    filterType:'text',          width:70, display:r=>`<span class="cell-code">${r.code}</span>` },
   { key:'name',              label:'名称',    filterType:'text',          width:100, display:r=>`<span class="cell-name">${r.name||''}</span>` },
@@ -824,7 +825,8 @@ function histStatusText(r) {
 }
 
 function recommendationLabel(r) {
-  if (r.is_buy_point) return '今日推荐';
+  if (r.is_strong_pick || r.is_buy_point) return '强推荐';
+  if (r.is_today_candidate) return '今日候选';
   if (r.status === '刚金叉') return '买入窗口';
   if (r.status === '即将金叉') return '提前关注';
   if (r.status === '持仓期') return '持仓观察';
@@ -834,7 +836,8 @@ function recommendationLabel(r) {
 
 function renderRecommendationCell(r) {
   const label = recommendationLabel(r);
-  if (label === '今日推荐') return '<span class="badge badge-gold">今日推荐</span>';
+  if (label === '强推荐') return '<span class="badge badge-gold">强推荐</span>';
+  if (label === '今日候选') return '<span class="badge badge-red">今日候选</span>';
   if (label === '买入窗口') return '<span class="badge badge-red">买入窗口</span>';
   if (label === '提前关注') return '<span class="badge badge-yellow">提前关注</span>';
   if (label === '持仓观察') return '<span class="badge badge-blue">持仓观察</span>';
@@ -859,9 +862,7 @@ function renderSellHintCell(r) {
    KPI Cards
 ───────────────────────────────────────────────── */
 function buildCards(s) {
-  const pickSub = (s.today_picks||0) > 0 ? '量价+历史同时达标' : '暂无同时达标买点';
   const items = [
-    { label:'今日推荐', v:s.today_picks||0,  cls:'c-gold',   sub:pickSub },
     { label:'刚金叉',   v:s.just_cross||0,   cls:'c-green',  sub:'窗口内（≤5天）' },
     { label:'即将金叉', v:s.imminent||0,     cls:'c-yellow', sub:'预计5天内穿越' },
     { label:'持仓期',   v:s.holding||0,      cls:'c-blue',   sub:'已金叉待持仓' },
@@ -956,12 +957,14 @@ function getCellVal(row, key) {
   if (key==='dif_positive')     return row.dif_positive?'上方':'下方';
   if (key==='history_status')   return histStatusText(row);
   if (key==='sell_hint_display') return row.sell_hint||'';
-  if (key==='is_buy_point')     return row.is_buy_point;
+  if (key==='is_strong_pick')   return row.is_strong_pick || row.is_buy_point;
+  if (key==='is_today_candidate') return row.is_today_candidate;
   return row[key];
 }
 
 function passQuickFilter(row) {
-  if (activeQuickFilter === 'today') return !!row.is_buy_point;
+  if (activeQuickFilter === 'candidate') return !!row.is_today_candidate;
+  if (activeQuickFilter === 'strong') return !!(row.is_strong_pick || row.is_buy_point);
   if (activeQuickFilter === 'just') return row.status === '刚金叉';
   if (activeQuickFilter === 'near') return row.status === '即将金叉';
   if (activeQuickFilter === 'holding') return row.status === '持仓期';
@@ -989,13 +992,13 @@ function comparator(a, b) {
   const {key, dir} = getSort();
   let va, vb;
   if (key==='recommendation') {
-    const order = {'今日推荐':1,'买入窗口':2,'提前关注':3,'持仓观察':4,'风险提示':5,'等待':6};
+    const order = {'强推荐':1,'今日候选':2,'买入窗口':3,'提前关注':4,'持仓观察':5,'风险提示':6,'等待':7};
     va=order[recommendationLabel(a)]||99; vb=order[recommendationLabel(b)]||99;
   }
   else if (key==='status')         { va=STATUS_ORDER[a.status]||99; vb=STATUS_ORDER[b.status]||99; }
   else if (key==='history_status') { va=HISTORY_STATUS_ORDER[histStatusCode(a)]||99; vb=HISTORY_STATUS_ORDER[histStatusCode(b)]||99; }
   else if (key==='dif_positive')   { va=a.dif_positive?1:0; vb=b.dif_positive?1:0; }
-  else if (key==='is_buy_point')   { va=a.is_buy_point?1:0; vb=b.is_buy_point?1:0; }
+  else if (key==='is_strong_pick') { va=(a.is_strong_pick||a.is_buy_point)?1:0; vb=(b.is_strong_pick||b.is_buy_point)?1:0; }
   else { va=getCellVal(a,key); vb=getCellVal(b,key); }
 
   if (typeof va==='boolean') va=va?1:0;
@@ -1055,7 +1058,8 @@ function setQuickFilter(name) {
 function updateListHint() {
   const counts = {
     all: allStocks.length,
-    today: allStocks.filter(s=>s.is_buy_point).length,
+    candidate: allStocks.filter(s=>s.is_today_candidate).length,
+    strong: allStocks.filter(s=>s.is_strong_pick || s.is_buy_point).length,
     just: allStocks.filter(s=>s.status==='刚金叉').length,
     near: allStocks.filter(s=>s.status==='即将金叉').length,
     holding: allStocks.filter(s=>s.status==='持仓期').length,
@@ -1065,7 +1069,8 @@ function updateListHint() {
   };
   const labels = {
     all: '全部',
-    today: '今日推荐',
+    candidate: '今日候选',
+    strong: '强推荐',
     just: '刚金叉',
     near: '即将金叉',
     holding: '持仓期',
@@ -1077,9 +1082,9 @@ function updateListHint() {
     const key = btn.dataset.qf;
     if (labels[key]) btn.innerHTML = `${labels[key]} <span class="chip-count mono">${counts[key] ?? 0}</span>`;
   });
-  const hint = activeQuickFilter === 'today' && counts.today === 0
-    ? '今日推荐为 0：当前没有同时满足金叉、量价过滤、历史胜率和Calmar阈值的股票'
-    : `今日推荐 ${counts.today} · 刚金叉 ${counts.just} · 即将金叉 ${counts.near} · 持仓期 ${counts.holding} · 刚死叉 ${counts.death} · 历史有效 ${counts.history}`;
+  const hint = activeQuickFilter === 'strong' && counts.strong === 0
+    ? '强推荐为 0：当前没有同时满足今日候选、历史胜率和Calmar阈值的股票'
+    : `今日候选 ${counts.candidate} · 强推荐 ${counts.strong} · 刚金叉 ${counts.just} · 即将金叉 ${counts.near} · 持仓期 ${counts.holding} · 刚死叉 ${counts.death} · 历史有效 ${counts.history}`;
   document.getElementById('list-hint').textContent = hint;
 }
 
@@ -1137,10 +1142,14 @@ function resetFilters() {
 ───────────────────────────────────────────────── */
 function setRecommendation(s) {
   const box = document.getElementById('rec-box');
-  if (s.is_buy_point) {
+  if (s.is_strong_pick || s.is_buy_point) {
     box.className='rec-box rec-buy';
-    document.getElementById('rec-title').textContent='强烈推荐买入';
+    document.getElementById('rec-title').textContent='强推荐';
     document.getElementById('rec-desc').textContent=`金叉${s.days_event||'-'}天，量价过滤通过，历史胜率${s.win_rate!=null?(s.win_rate*100).toFixed(2)+'%':'未知'}，综合评分${s.buy_score||0}分。`;
+  } else if (s.is_today_candidate) {
+    box.className='rec-box rec-buy';
+    document.getElementById('rec-title').textContent='今日候选';
+    document.getElementById('rec-desc').textContent=`最近金叉后${s.days_event||'-'}天，基础量价过滤通过；历史样本或胜率/Calmar尚未达到强推荐标准。`;
   } else if (s.status==='刚金叉') {
     box.className='rec-box rec-buy';
     document.getElementById('rec-title').textContent='买入窗口';
@@ -1203,7 +1212,8 @@ function fillDetail(row) {
 
   // 买卖时机 section
   let actionText = '等待';
-  if (row.is_buy_point)         actionText = '强烈推荐买入';
+  if (row.is_strong_pick || row.is_buy_point) actionText = '强推荐';
+  else if (row.is_today_candidate) actionText = '今日候选';
   else if (row.status==='刚金叉')   actionText = '可考虑买入';
   else if (row.status==='即将金叉') actionText = '提前关注';
   else if (row.status==='持仓期')   actionText = '继续持有';

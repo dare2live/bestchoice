@@ -1616,10 +1616,11 @@ class ComputeEngine:
                 cal      = row.get("calmar")   or 0.0
                 has_hist = row["has_history"]
 
-                # is_buy_point: 刚金叉 within 3 days + good history
-                row["is_buy_point"] = bool(
-                    is_just and days_ev <= 3 and fp and has_hist and wr >= 0.48 and cal >= 0.5
+                row["is_today_candidate"] = bool(is_just and days_ev <= 3 and fp)
+                row["is_strong_pick"] = bool(
+                    row["is_today_candidate"] and has_hist and wr >= 0.48 and cal >= 0.5
                 )
+                row["is_buy_point"] = row["is_strong_pick"]
 
                 # buy_score: 0-100 composite for ranking today's picks
                 score = 0.0
@@ -1657,7 +1658,8 @@ class ComputeEngine:
                 "death": sum(1 for r in current if r["status"] == S_DEATH),
                 "waiting": sum(1 for r in current if r["status"] == S_WAIT),
                 "with_history": sum(1 for r in current if r["has_history"]),
-                "today_picks": sum(1 for r in current if r.get("is_buy_point")),
+                "today_candidates": sum(1 for r in current if r.get("is_today_candidate")),
+                "strong_picks": sum(1 for r in current if r.get("is_strong_pick")),
                 "f1_hits": sum(1 for r in current if r["f1_hit"]),
                 "f3_hits": sum(1 for r in current if r["f3_hit"]),
                 "f5_hits": sum(1 for r in current if r["f5_hit"]),
