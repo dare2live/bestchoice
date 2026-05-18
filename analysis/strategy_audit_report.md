@@ -6,18 +6,18 @@ Recent window: latest 20 selected completed trades per strategy.
 
 | Rank | Strategy | Price Mode | Recent N | Recent Avg Ret | Recent Win | Recent Calmar | All Selected N | All Avg Ret | All Win |
 |---:|---|---|---:|---:|---:|---:|---:|---:|---:|
-| 1 | tdx_12_26_9 | current_model_vwap | 20 | 4.46% | 60.00% | 1.11 | 2833 | 8.70% | 62.55% |
-| 2 | macd_12_26_9 | current_model_vwap | 20 | 4.00% | 60.00% | 0.62 | 340 | 11.62% | 60.88% |
-| 3 | macd_12_26_9 | qfq_next_close | 20 | 5.69% | 70.00% | 0.53 | 67 | 3.37% | 61.19% |
-| 4 | tdx_12_26_9 | qfq_next_close | 20 | 2.39% | 70.00% | 0.52 | 808 | 1.15% | 52.35% |
-| 5 | macd_10_22_8_h15 | current_model_vwap | 20 | 2.93% | 50.00% | 0.38 | 389 | 14.65% | 62.21% |
-| 6 | macd_10_22_8 | current_model_vwap | 20 | 2.93% | 50.00% | 0.38 | 389 | 14.65% | 62.21% |
-| 7 | macd_14_30_11 | qfq_next_close | 20 | 3.54% | 55.00% | 0.28 | 75 | 3.93% | 58.67% |
-| 8 | optuna_best | current_model_vwap | 20 | 1.08% | 55.00% | 0.15 | 615 | 13.40% | 66.67% |
-| 9 | optuna_best | qfq_next_close | 20 | 0.56% | 45.00% | 0.07 | 129 | 3.63% | 55.81% |
-| 10 | macd_10_22_8_h15 | qfq_next_close | 20 | -0.44% | 40.00% | -0.04 | 65 | 3.93% | 50.77% |
-| 11 | macd_10_22_8 | qfq_next_close | 20 | -0.44% | 40.00% | -0.04 | 65 | 3.93% | 50.77% |
-| 12 | macd_14_30_11 | current_model_vwap | 20 | -1.98% | 35.00% | -0.23 | 282 | 8.42% | 59.22% |
+| 1 | tdx_12_26_9 | current_model_vwap | 20 | 4.46% | 60.00% | 1.11 | 1966 | 6.85% | 62.21% |
+| 2 | macd_10_22_8_h15 | current_model_vwap | 20 | 3.98% | 55.00% | 0.55 | 271 | 12.54% | 62.36% |
+| 3 | macd_10_22_8 | current_model_vwap | 20 | 3.98% | 55.00% | 0.55 | 271 | 12.54% | 62.36% |
+| 4 | macd_12_26_9 | qfq_next_close | 20 | 5.69% | 70.00% | 0.53 | 34 | 7.12% | 64.71% |
+| 5 | tdx_12_26_9 | qfq_next_close | 20 | 2.39% | 70.00% | 0.52 | 466 | 1.25% | 51.72% |
+| 6 | macd_14_30_11 | qfq_next_close | 20 | 5.45% | 60.00% | 0.45 | 43 | 8.16% | 69.77% |
+| 7 | macd_12_26_9 | current_model_vwap | 20 | 3.07% | 60.00% | 0.43 | 202 | 10.37% | 60.40% |
+| 8 | optuna_best | current_model_vwap | 20 | 1.43% | 60.00% | 0.20 | 440 | 11.58% | 67.05% |
+| 9 | macd_10_22_8_h15 | qfq_next_close | 20 | 1.66% | 50.00% | 0.14 | 41 | 5.88% | 60.98% |
+| 10 | macd_10_22_8 | qfq_next_close | 20 | 1.66% | 50.00% | 0.14 | 41 | 5.88% | 60.98% |
+| 11 | optuna_best | qfq_next_close | 20 | 0.19% | 45.00% | 0.02 | 76 | 5.05% | 61.84% |
+| 12 | macd_14_30_11 | current_model_vwap | 20 | -1.67% | 35.00% | -0.21 | 170 | 7.20% | 57.06% |
 
 ## Recent Cases
 

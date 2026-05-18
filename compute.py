@@ -31,6 +31,7 @@ from settings import CACHE_DIR, CACHE_MAX_AGE, MARKET_DB, MAX_WARMUP_WORKERS, SC
 # 路径与缓存
 # ---------------------------------------------------------------------------
 HOLDING_PERIODS = [5, 10, 15, 20, 30, 60]  # 多持股期回测天数
+MIN_HISTORY_SIGNALS = 5
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +114,7 @@ DEFAULT_PROFILES = {
         "holding_days": 15,
         "amt_ratio_min": 1.42,
         "price_pos_max": 0.60,
-        "min_signals": 1,
+        "min_signals": MIN_HISTORY_SIGNALS,
     },
 }
 
@@ -179,7 +180,7 @@ FORMULA_PROFILES = {
         "holding_days": 15,
         "amt_ratio_min": 1.0,
         "price_pos_max": 1.0,
-        "min_signals": 1,
+        "min_signals": MIN_HISTORY_SIGNALS,
     },
     "f3_only": {
         "id": "formula_f3",
@@ -195,7 +196,7 @@ FORMULA_PROFILES = {
         "holding_days": 15,
         "amt_ratio_min": 1.0,
         "price_pos_max": 1.0,
-        "min_signals": 1,
+        "min_signals": MIN_HISTORY_SIGNALS,
     },
     "f5_only": {
         "id": "formula_f5",
@@ -211,7 +212,7 @@ FORMULA_PROFILES = {
         "holding_days": 15,
         "amt_ratio_min": 1.0,
         "price_pos_max": 1.0,
-        "min_signals": 1,
+        "min_signals": MIN_HISTORY_SIGNALS,
     },
     "f123_any": {
         "id": "formula_any",
@@ -227,7 +228,7 @@ FORMULA_PROFILES = {
         "holding_days": 15,
         "amt_ratio_min": 1.0,
         "price_pos_max": 1.0,
-        "min_signals": 1,
+        "min_signals": MIN_HISTORY_SIGNALS,
     },
 }
 
@@ -300,7 +301,7 @@ def _profile_cache_payload(profile: dict[str, Any]) -> dict[str, Any]:
 
 def _cache_signature(profile: dict[str, Any]) -> str:
     payload = {
-        "schema": 3,
+        "schema": 4,
         "profile": _profile_cache_payload(profile),
         "holding_periods": HOLDING_PERIODS,
         "market_db": _file_fingerprint(MARKET_DB),
@@ -452,7 +453,7 @@ def _parse_optuna_profile() -> Optional[dict[str, Any]]:
                 "amt_ratio_min": _to_float(params.get("amt_ratio_min")) or 1.5,
                 "price_pos_max": _to_float(params.get("price_pos_max")) or 0.60,
                 "dif_positive": bool(params.get("dif_positive", False)),
-                "min_signals": 1,
+                "min_signals": MIN_HISTORY_SIGNALS,
                 "optuna_score": _to_float(params.get("score")) or 0.0,
                 "optuna_n": _to_int(params.get("signal_count"), 0),
                 "formula_rule_id": "optuna_macd",
@@ -495,7 +496,7 @@ def _parse_optuna_profile() -> Optional[dict[str, Any]]:
         "amt_ratio_min": _to_float(row.get("avg_amt_r20")) or 1.5,
         "price_pos_max": _to_float(row.get("avg_price60")) or 0.60,
         "dif_positive": False,
-        "min_signals": 1,
+        "min_signals": MIN_HISTORY_SIGNALS,
         "optuna_score": _to_float(row.get("score")) or 0.0,
         "optuna_n": _to_int(row.get("n"), 0),
         "formula_rule_id": "optuna_macd",
@@ -534,7 +535,7 @@ def _parse_golden_profile() -> Optional[dict[str, Any]]:
         "holding_days": best_holding,
         "amt_ratio_min": 1.0,
         "price_pos_max": 0.70,
-        "min_signals": 1,
+        "min_signals": MIN_HISTORY_SIGNALS,
         "formula_rule_id": "golden_cross",
         "best_calmar": best_calmar,
     }
@@ -584,7 +585,7 @@ def get_strategy_profiles() -> dict[str, dict[str, Any]]:
                 "holding_days": 15,
                 "amt_ratio_min": 1.42,
                 "price_pos_max": 0.60,
-                "min_signals": 1,
+                "min_signals": MIN_HISTORY_SIGNALS,
             }
 
     for k, v in FORMULA_PROFILES.items():
@@ -604,6 +605,8 @@ def get_strategy_profiles() -> dict[str, dict[str, Any]]:
 
 
 def get_default_profile_id(profiles: dict[str, dict[str, Any]]) -> str:
+    if "tdx_12_26_9" in profiles:
+        return "tdx_12_26_9"
     if "optuna_best" in profiles:
         return "optuna_best"
     if "macd_10_22_8_h15" in profiles:
@@ -824,6 +827,9 @@ def compute_historical(profile: dict[str, Any], progress_cb=None) -> dict[str, d
 
         dif = ema_np(cls, fast) - ema_np(cls, slow)
         dea = ema_np(dif, sig)
+        amt_ma20 = sma_np(amt, 20)
+        vol_ma20 = sma_np(vol, 20)
+        max60_arr = rolling_max_np(cls, 60)
 
         cross    = (dif[:-1] < dea[:-1]) & (dif[1:] > dea[1:])
         sig_idxs = np.where(cross)[0] + 1
@@ -835,6 +841,24 @@ def compute_historical(profile: dict[str, Any], progress_cb=None) -> dict[str, d
         for si in sig_idxs:
             buy_i = si + 1          # T+1: 金叉后第一个交易日买入
             if buy_i >= n or cls[buy_i] <= 0:
+                continue
+            if (
+                vol_ma20[si] <= 0
+                or np.isnan(vol_ma20[si])
+                or amt_ma20[si] <= 0
+                or np.isnan(amt_ma20[si])
+                or max60_arr[si] <= 0
+            ):
+                continue
+            vol_r20 = float(vol[si] / vol_ma20[si])
+            amt_r20 = float(amt[si] / amt_ma20[si])
+            price60 = float(cls[si] / max60_arr[si])
+            if (
+                vol_r20 < float(profile.get("vol_ratio_min", 1.0))
+                or amt_r20 < float(profile.get("amt_ratio_min", 1.0))
+                or price60 > float(profile.get("price_pos_max", 1.0))
+                or (profile.get("dif_positive") and float(dif[si]) <= 0)
+            ):
                 continue
             buy_price = float(cls[buy_i])
 
