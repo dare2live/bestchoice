@@ -926,6 +926,19 @@ tbody tr.selected .cell-code {
   display: inline-block;
 }
 .chart-legend i.bar { height: 7px; width: 7px; border-radius: 1.5px; }
+.chart-legend i.square {
+  width: 7px;
+  height: 7px;
+  border-radius: 1.5px;
+  background: currentColor;
+}
+.chart-legend i.diamond {
+  width: 7px;
+  height: 7px;
+  border-radius: 1.5px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
 .chart-legend i.dot {
   width: 6px;
   height: 6px;
@@ -948,7 +961,7 @@ tbody tr.selected .cell-code {
 .chart-canvas-wrap { padding: 2px 6px 4px; }
 
 /* MACD chart sizing inside drawer */
-.detail-body #chart-price { height: 168px !important; }
+.detail-body #chart-price { height: 220px !important; }
 .detail-body #chart-macd { height: 138px !important; }
 
 /* ── Param cards ─────────────────────────────────── */
@@ -1236,6 +1249,8 @@ tbody tr.selected .cell-code {
                 <span style="color:#2d6cdf"><i style="background:#2d6cdf"></i>收盘价</span>
                 <span style="color:#c4302b"><i class="arrow-up"></i>金叉</span>
                 <span style="color:#1f9e6e"><i class="arrow-down"></i>死叉</span>
+                <span style="color:#b07d10"><i class="diamond"></i>买点</span>
+                <span style="color:#1f1d1a"><i class="square"></i>卖点</span>
               </span>
             </div>
             <div class="chart-canvas-wrap" id="chart-wrap-price"><canvas id="chart-price"></canvas></div>
@@ -2037,6 +2052,8 @@ async function loadChart(code) {
     neg: '#1f9e6e',           // 绿跌
     posBar: 'rgba(196, 48, 43, 0.55)',
     negBar: 'rgba(31, 158, 110, 0.55)',
+    buy: '#b07d10',
+    sell: '#1f1d1a',
     grid: 'rgba(20, 18, 14, 0.05)',
     tick: '#8a877f',
   };
@@ -2047,27 +2064,79 @@ async function loadChart(code) {
   const grad = priceCtx.createLinearGradient(0, 0, 0, priceCanvas.height || 140);
   grad.addColorStop(0, C.accentSoft);
   grad.addColorStop(1, C.accentSofter);
+  const tradePoints = d.backtest_trades || [];
+  const buyPoints = tradePoints
+    .filter(t => Number.isInteger(t.buy_idx) && t.buy_idx >= 0 && t.buy_idx < n)
+    .map(t => ({
+      x: labels[t.buy_idx],
+      y: d.close[t.buy_idx],
+      tradeDate: t.buy_date,
+      price: t.buy_price,
+      kind: '买点',
+      holdingDays: t.holding_days,
+      ret: t.ret,
+    }));
+  const sellPoints = tradePoints
+    .filter(t => Number.isInteger(t.sell_idx) && t.sell_idx >= 0 && t.sell_idx < n)
+    .map(t => ({
+      x: labels[t.sell_idx],
+      y: d.close[t.sell_idx],
+      tradeDate: t.sell_date,
+      price: t.sell_price,
+      kind: '卖点',
+      holdingDays: t.holding_days,
+      ret: t.ret,
+    }));
 
   chartPrice = new Chart(priceCtx, {
     type: 'line',
     data: {
       labels,
-      datasets: [{
-        label: '收盘价',
-        data: d.close,
-        borderColor: C.accent,
-        borderWidth: 1.6,
-        backgroundColor: grad,
-        fill: true,
-        tension: 0.28,
-        pointRadius: Array.from({length:n}, (_,i)=>(gc.has(i)||dc.has(i))?6:0),
-        pointHoverRadius: Array.from({length:n}, (_,i)=>(gc.has(i)||dc.has(i))?7:0),
-        pointBackgroundColor: Array.from({length:n}, (_,i)=>gc.has(i)?C.pos:dc.has(i)?C.neg:'transparent'),
-        pointBorderColor: '#ffffff',
-        pointBorderWidth: 1.4,
-        pointStyle: Array.from({length:n}, (_,i)=>(gc.has(i)||dc.has(i))?'triangle':'circle'),
-        pointRotation: Array.from({length:n}, (_,i)=>dc.has(i)?180:0),
-      }]
+      datasets: [
+        {
+          label: '收盘价',
+          data: d.close,
+          borderColor: C.accent,
+          borderWidth: 1.6,
+          backgroundColor: grad,
+          fill: true,
+          tension: 0.28,
+          pointRadius: Array.from({length:n}, (_,i)=>(gc.has(i)||dc.has(i))?5:0),
+          pointHoverRadius: Array.from({length:n}, (_,i)=>(gc.has(i)||dc.has(i))?6:0),
+          pointBackgroundColor: Array.from({length:n}, (_,i)=>gc.has(i)?C.pos:dc.has(i)?C.neg:'transparent'),
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 1.4,
+          pointStyle: Array.from({length:n}, (_,i)=>(gc.has(i)||dc.has(i))?'triangle':'circle'),
+          pointRotation: Array.from({length:n}, (_,i)=>dc.has(i)?180:0),
+          order: 3,
+        },
+        {
+          type: 'scatter',
+          label: '回测买点',
+          data: buyPoints,
+          borderColor: '#ffffff',
+          backgroundColor: C.buy,
+          pointStyle: 'rectRot',
+          pointRadius: 6.5,
+          pointHoverRadius: 8,
+          pointBorderWidth: 1.5,
+          showLine: false,
+          order: 1,
+        },
+        {
+          type: 'scatter',
+          label: '回测卖点',
+          data: sellPoints,
+          borderColor: '#ffffff',
+          backgroundColor: C.sell,
+          pointStyle: 'rect',
+          pointRadius: 6,
+          pointHoverRadius: 7.5,
+          pointBorderWidth: 1.5,
+          showLine: false,
+          order: 0,
+        },
+      ]
     },
     options: chartOpts('', false, C)
   });
@@ -2117,7 +2186,15 @@ function chartOpts(prefix, isMacd, C) {
         boxHeight: 8,
         boxPadding: 4,
         callbacks: {
-          label: (ctx) => `${ctx.dataset.label}: ${prefix}${typeof ctx.raw==='number'?ctx.raw.toFixed(isMacd?3:2):ctx.raw}`
+          label: (ctx) => {
+            const raw = ctx.raw;
+            if (raw && typeof raw === 'object' && raw.kind) {
+              const price = raw.price != null ? Number(raw.price).toFixed(2) : Number(raw.y).toFixed(2);
+              const ret = raw.ret != null ? `，收益 ${(Number(raw.ret) * 100).toFixed(2)}%` : '';
+              return `${raw.kind}: ${raw.tradeDate || raw.x} · ${prefix}${price}${ret}`;
+            }
+            return `${ctx.dataset.label}: ${prefix}${typeof raw==='number'?raw.toFixed(isMacd?3:2):raw}`;
+          }
         }
       }
     },

@@ -1064,6 +1064,12 @@ def compute_current(meta: dict[str, tuple], profile: dict[str, Any], formula_hit
     slow = int(profile["macd_slow"])
     sig = int(profile["macd_signal"])
     holding_days = int(profile["holding_days"])
+    try:
+        if _cache_fresh(profile["id"], profile):
+            hist_row = _load_cache(profile["id"]).get(normalize_code(code)) or {}
+            holding_days = int(hist_row.get("best_holding_days") or holding_days)
+    except Exception:
+        holding_days = int(profile["holding_days"])
 
     idx = 0
     results: list[dict[str, Any]] = []
@@ -1257,22 +1263,86 @@ def get_chart_data(code: str, profile: dict[str, Any]) -> dict[str, Any]:
     lows = raw["low"][::-1].astype(np.float64)
     closes = raw["close"][::-1].astype(np.float64)
     volumes = raw["volume"][::-1].astype(np.float64)
+    amounts = raw["amount"][::-1].astype(np.float64)
     n = len(closes)
 
     fast = int(profile["macd_fast"])
     slow = int(profile["macd_slow"])
     sig = int(profile["macd_signal"])
+    holding_days = int(profile["holding_days"])
 
     dif = ema_np(closes, fast) - ema_np(closes, slow)
     dea = ema_np(dif, sig)
     bar = (dif - dea) * 2
+    amt_ma20 = sma_np(amounts, 20)
+    vol_ma20 = sma_np(volumes, 20)
+    max60_arr = rolling_max_np(closes, 60)
 
     crosses = []
+    backtest_trades = []
     for i in range(1, n):
         if dif[i] > dea[i] and dif[i - 1] <= dea[i - 1]:
             crosses.append({"idx": i, "type": "golden", "date": str(dates[i]), "close": round(float(closes[i]), 2)})
         elif dif[i] < dea[i] and dif[i - 1] >= dea[i - 1]:
             crosses.append({"idx": i, "type": "death", "date": str(dates[i]), "close": round(float(closes[i]), 2)})
+
+        if dif[i] > dea[i] and dif[i - 1] < dea[i - 1]:
+            buy_i = i + 1
+            sell_i = buy_i + holding_days
+            if buy_i >= n or closes[buy_i] <= 0:
+                continue
+            if (
+                vol_ma20[i] <= 0
+                or np.isnan(vol_ma20[i])
+                or amt_ma20[i] <= 0
+                or np.isnan(amt_ma20[i])
+                or max60_arr[i] <= 0
+            ):
+                continue
+            vol_r20 = float(volumes[i] / vol_ma20[i])
+            amt_r20 = float(amounts[i] / amt_ma20[i])
+            price60 = float(closes[i] / max60_arr[i])
+            if (
+                vol_r20 < float(profile.get("vol_ratio_min", 1.0))
+                or amt_r20 < float(profile.get("amt_ratio_min", 1.0))
+                or price60 > float(profile.get("price_pos_max", 1.0))
+                or (profile.get("dif_positive") and float(dif[i]) <= 0)
+            ):
+                continue
+            buy_price = float(closes[buy_i])
+            if sell_i < n:
+                sell_price = float(closes[sell_i])
+                ret = (sell_price - buy_price) / buy_price
+                backtest_trades.append(
+                    {
+                        "signal_idx": i,
+                        "buy_idx": buy_i,
+                        "sell_idx": sell_i,
+                        "signal_date": str(dates[i]),
+                        "buy_date": str(dates[buy_i]),
+                        "sell_date": str(dates[sell_i]),
+                        "buy_price": round(buy_price, 2),
+                        "sell_price": round(sell_price, 2),
+                        "ret": round(ret, 4),
+                        "holding_days": holding_days,
+                    }
+                )
+            else:
+                backtest_trades.append(
+                    {
+                        "signal_idx": i,
+                        "buy_idx": buy_i,
+                        "sell_idx": None,
+                        "signal_date": str(dates[i]),
+                        "buy_date": str(dates[buy_i]),
+                        "sell_date": None,
+                        "buy_price": round(buy_price, 2),
+                        "sell_price": None,
+                        "ret": None,
+                        "holding_days": holding_days,
+                        "open": True,
+                    }
+                )
 
     start = max(0, n - 90)
     status, days_ev, gap = current_status(dif, dea, closes)
@@ -1291,6 +1361,19 @@ def get_chart_data(code: str, profile: dict[str, Any]) -> dict[str, Any]:
             {**c, "idx": c["idx"] - start}
             for c in crosses
             if c["idx"] >= start
+        ],
+        "backtest_trades": [
+            {
+                **t,
+                "signal_idx": t["signal_idx"] - start,
+                "buy_idx": t["buy_idx"] - start,
+                "sell_idx": t["sell_idx"] - start if t.get("sell_idx") is not None else None,
+            }
+            for t in backtest_trades
+            if (
+                t["buy_idx"] >= start
+                or (t.get("sell_idx") is not None and t["sell_idx"] >= start)
+            )
         ],
         "status": status,
         "days_event": days_ev,
