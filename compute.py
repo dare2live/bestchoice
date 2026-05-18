@@ -246,6 +246,7 @@ def normalize_code(v: Any) -> str:
 
 # Cache the latest data date so we don't re-query on every computation
 _LATEST_DATA_DATE: Optional[str] = None
+_DATA_FRESHNESS: Optional[dict[str, Any]] = None
 _LATEST_DATA_DATE_LOCK = threading.Lock()
 _CACHE_LOCKS: dict[str, threading.Lock] = {}
 _CACHE_LOCKS_GUARD = threading.Lock()
@@ -313,22 +314,62 @@ def _cache_signature(profile: dict[str, Any]) -> str:
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
-def get_latest_data_date() -> str:
-    """Return the latest trading date (cached after first call)."""
-    global _LATEST_DATA_DATE
-    if _LATEST_DATA_DATE is not None:
-        return _LATEST_DATA_DATE
+def get_data_freshness() -> dict[str, Any]:
+    global _DATA_FRESHNESS, _LATEST_DATA_DATE
+    if _DATA_FRESHNESS is not None:
+        return _DATA_FRESHNESS
     with _LATEST_DATA_DATE_LOCK:
-        if _LATEST_DATA_DATE is not None:
-            return _LATEST_DATA_DATE
+        if _DATA_FRESHNESS is not None:
+            return _DATA_FRESHNESS
         try:
             _require_source_dbs()
             con = duckdb.connect(str(MARKET_DB), read_only=True)
-            row = con.execute("SELECT MAX(date) FROM v_price_kline_qfq").fetchone()
+            rows = con.execute(
+                """
+                WITH daily AS (
+                    SELECT date, COUNT(*) AS n
+                    FROM v_price_kline_qfq
+                    GROUP BY date
+                ),
+                stats AS (
+                    SELECT MAX(n) AS max_n FROM daily
+                )
+                SELECT d.date, d.n, d.n::DOUBLE / NULLIF(s.max_n, 0) AS coverage
+                FROM daily d
+                CROSS JOIN stats s
+                ORDER BY d.date DESC
+                LIMIT 10
+                """
+            ).fetchall()
             con.close()
-            _LATEST_DATA_DATE = str(row[0]) if row and row[0] else "未知"
+            latest = rows[0] if rows else None
+            coverage_row = next((r for r in rows if float(r[2] or 0) >= 0.95), latest)
+            _DATA_FRESHNESS = {
+                "latest_data_date": str(coverage_row[0]) if coverage_row else "未知",
+                "global_latest_data_date": str(latest[0]) if latest else "未知",
+                "global_latest_stock_count": int(latest[1]) if latest else 0,
+                "coverage_latest_stock_count": int(coverage_row[1]) if coverage_row else 0,
+                "coverage_latest_ratio": round(float(coverage_row[2] or 0), 4) if coverage_row else 0.0,
+            }
+            _LATEST_DATA_DATE = _DATA_FRESHNESS["latest_data_date"]
         except Exception:
+            _DATA_FRESHNESS = {
+                "latest_data_date": "未知",
+                "global_latest_data_date": "未知",
+                "global_latest_stock_count": 0,
+                "coverage_latest_stock_count": 0,
+                "coverage_latest_ratio": 0.0,
+            }
             _LATEST_DATA_DATE = "未知"
+    return _DATA_FRESHNESS
+
+
+def get_latest_data_date() -> str:
+    """Return the latest market date with broad stock coverage."""
+    global _LATEST_DATA_DATE
+    if _LATEST_DATA_DATE is not None:
+        return _LATEST_DATA_DATE
+    _LATEST_DATA_DATE = get_data_freshness()["latest_data_date"]
     return _LATEST_DATA_DATE
 
 
@@ -1641,7 +1682,7 @@ class ComputeEngine:
                 "profile": self._build_profile_payload(profile),
                 "profile_id": profile["id"],
                 "computed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "latest_data_date": get_latest_data_date(),
+                **get_data_freshness(),
             }
 
             with self._lock:

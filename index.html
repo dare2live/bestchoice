@@ -793,7 +793,7 @@ function buildParamPanel(d) {
   document.getElementById('strategy-meta').textContent = `${profile.name||''} · ${source}`;
   document.getElementById('update-time').textContent   = `更新 ${d.computed_at||''}`;
   if (d.latest_data_date) {
-    document.getElementById('data-date').textContent = `数据至 ${d.latest_data_date}`;
+    setDataDateLabel(d);
   }
   document.getElementById('param-panel').innerHTML = Object.entries(params).map(([k,v]) => {
     const formatParamValue = val => {
@@ -1217,6 +1217,20 @@ function chartOpts(prefix, zero) {
   };
 }
 
+function setDataDateLabel(s) {
+  const el = document.getElementById('data-date');
+  const latest = s.latest_data_date || '';
+  const globalLatest = s.global_latest_data_date || latest;
+  const count = s.global_latest_stock_count;
+  if (globalLatest && globalLatest !== latest) {
+    el.textContent = `数据至 ${latest}（少量至 ${globalLatest}）`;
+    el.title = `覆盖率最新交易日：${latest}；全局最新日期 ${globalLatest} 只有 ${count ?? '-'} 只股票。`;
+  } else {
+    el.textContent = latest ? `数据至 ${latest}` : '';
+    el.title = '行情数据最新交易日';
+  }
+}
+
 /* ─────────────────────────────────────────────────
    API & polling
 ───────────────────────────────────────────────── */
@@ -1256,7 +1270,7 @@ function pollStatus() {
     const dot = document.getElementById('status-dot');
     dot.classList.toggle('ready', !!s.ready);
     document.getElementById('status-text').textContent = s.message||'---';
-    if (s.latest_data_date) document.getElementById('data-date').textContent = `数据至 ${s.latest_data_date}`;
+    if (s.latest_data_date) setDataDateLabel(s);
     if (s.ready) {
       clearInterval(pollTimer); pollTimer=null;
       document.getElementById('loading').classList.remove('show');

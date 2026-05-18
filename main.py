@@ -13,7 +13,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from compute import ComputeEngine, get_chart_data, SCRIPTS_DIR, get_latest_data_date
+from compute import ComputeEngine, get_chart_data, SCRIPTS_DIR, get_data_freshness, get_latest_data_date
 
 engine = ComputeEngine()
 
@@ -40,7 +40,7 @@ async def api_status(strategy: Optional[str] = None):
         s = engine.status(strategy)
     except KeyError:
         raise HTTPException(404, f"未找到策略: {strategy}")
-    s["latest_data_date"] = get_latest_data_date()
+    s.update(get_data_freshness())
     return s
 
 
