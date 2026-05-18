@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MACD 选股台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <style>
 :root {
@@ -54,8 +57,9 @@ body {
 }
 
 .mono {
-  font-family: "SF Mono", "Roboto Mono", "Menlo", monospace;
+  font-family: "JetBrains Mono", "SF Mono", "Roboto Mono", "Menlo", monospace;
   font-feature-settings: "tnum";
+  letter-spacing: 0;
 }
 
 /* ── Topbar ─────────────────────────────────────── */
@@ -78,7 +82,6 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-#strategy-meta { max-width: 360px; }
 #topbar .gap { flex: 1; }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand-mark {
@@ -86,30 +89,90 @@ body {
   display: grid; place-items: center;
   background: var(--text);
   color: var(--surface);
-  font: 700 14px/1 "SF Mono", "Roboto Mono", "Menlo", monospace;
+  font: 700 14px/1 "JetBrains Mono", "SF Mono", "Roboto Mono", "Menlo", monospace;
   border-radius: 7px;
 }
 .brand-text { line-height: 1.1; }
 .brand-name { font-weight: 700; font-size: 14px; }
 .brand-sub { margin-top: 2px; font-size: 11px; color: var(--muted); }
-.strategy-picker {
+#strategy-select { display: none; }
+.strategy-bar {
+  flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.strategy-tabs {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.strategy-tabs::-webkit-scrollbar { display: none; }
+.strategy-tab {
+  position: relative;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  flex: 1 0 210px;
+  padding: 14px 20px;
+  cursor: pointer;
+  font: 600 13px/1.2 inherit;
+  text-align: center;
+  white-space: nowrap;
+}
+.strategy-tab:hover { background: var(--surface-hover); color: var(--text); }
+.strategy-tab.active {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: inset 0 -2px 0 var(--text);
+}
+.strategy-param-strip {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-left: 14px;
-  border-left: 1px solid var(--border);
+  padding: 10px 16px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
 }
-.picker-label { font-size: 12px; color: var(--muted); }
-
-#strategy-select {
-  min-width: 240px;
-  padding: 6px 28px 6px 12px;
+.param-chip {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-weight: 500;
+  color: var(--ink-2);
+  padding: 5px 10px;
+  font: 600 12px/1.2 "JetBrains Mono", "SF Mono", "Roboto Mono", "Menlo", monospace;
+  white-space: nowrap;
+}
+.param-source {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.param-toggle {
+  margin-left: auto;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--accent);
+  padding: 6px 10px;
+  font: 700 13px/1.2 inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.param-toggle:hover { background: var(--accent-bg); }
+.param-detail {
+  display: none;
+  padding: 14px 16px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.param-detail.open { display: block; }
+.param-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
 }
 .btn {
   border: 1px solid var(--border);
@@ -299,6 +362,16 @@ th[data-sort][title] { cursor: pointer; }
 tbody tr:hover { background: var(--surface-hover); }
 tbody tr.selected { background: var(--accent-bg); box-shadow: inset 3px 0 0 var(--accent); }
 td { font-size: 13px; }
+td:nth-child(3),
+td:nth-child(n+5),
+.card-value,
+.param-value,
+.d-cell-value,
+.timing-value {
+  font-family: "JetBrains Mono", "SF Mono", "Roboto Mono", "Menlo", monospace;
+  font-feature-settings: "tnum";
+  letter-spacing: 0;
+}
 
 /* ── Badges ──────────────────────────────────────── */
 .badge {
@@ -373,14 +446,11 @@ td { font-size: 13px; }
 .rpanel-content { flex: 1; overflow-y: auto; padding: 12px; min-height: 0; }
 
 /* ── Param cards ─────────────────────────────────── */
-.param-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
 .param-card {
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 9px 11px; background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  background: var(--surface);
 }
 .param-name  { font-size: 11px; color: var(--muted); }
 .param-value { font-size: 18px; font-weight: 700; margin-top: 2px; }
@@ -452,11 +522,13 @@ td { font-size: 13px; }
 /* ── Responsive ──────────────────────────────────── */
 @media (max-width: 1300px) {
   .main-layout { grid-template-columns: minmax(0, 1fr) 360px; }
+  .param-detail-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 1100px) {
   .main-layout { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
   .right-panel { max-height: 340px; }
   .cards-row   { grid-template-columns: repeat(4, 1fr); }
+  .param-detail-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 900px) {
   .cards-row   { grid-template-columns: repeat(3, 1fr); }
@@ -478,17 +550,22 @@ td { font-size: 13px; }
       <div class="brand-sub">MACD 选股台</div>
     </div>
   </div>
-  <div class="strategy-picker">
-    <span class="picker-label">策略</span>
-    <select id="strategy-select" onchange="onStrategyChange()"></select>
-  </div>
-  <span class="meta" id="strategy-meta"></span>
   <div class="gap"></div>
   <span id="status-dot"></span>
   <span id="status-text">---</span>
   <span class="meta" id="update-time"></span>
   <span class="meta" id="data-date" title="行情数据最新交易日"></span>
   <button class="btn" onclick="refreshCurrent()">重新计算</button>
+</div>
+<select id="strategy-select" onchange="onStrategyChange()"></select>
+
+<!-- Strategy tabs -->
+<div class="strategy-bar">
+  <div class="strategy-tabs" id="strategy-tabs"></div>
+  <div class="strategy-param-strip" id="strategy-param-strip"></div>
+  <div class="param-detail" id="param-detail">
+    <div id="param-panel" class="param-detail-grid"></div>
+  </div>
 </div>
 
 <!-- KPI Cards -->
@@ -560,21 +637,10 @@ td { font-size: 13px; }
     </div>
   </div>
 
-  <!-- RIGHT: detail + params -->
+  <!-- RIGHT: stock detail -->
   <div class="panel right-panel">
-    <!-- Right tabs -->
-    <div class="tab-strip">
-      <button class="tab-btn active" data-rtab="params" onclick="switchRightTab('params')">参数说明</button>
-      <button class="tab-btn"        data-rtab="detail" onclick="switchRightTab('detail')">股票详情</button>
-    </div>
-
-    <!-- Params content -->
-    <div id="rpanel-params" class="rpanel-content">
-      <div id="param-panel" class="param-grid"></div>
-    </div>
-
     <!-- Detail content -->
-    <div id="rpanel-detail" class="rpanel-content" style="display:none">
+    <div id="rpanel-detail" class="rpanel-content">
 
       <!-- Recommendation box -->
       <div id="rec-box" class="rec-wait">
@@ -764,7 +830,7 @@ const TABLE_COLUMNS = [
 let allStocks = [];
 let filtered  = [];
 let chartPrice = null, chartMacd = null;
-let activeRightTab = 'params';
+let activeRightTab = 'detail';
 let tableSort = { key:'recommendation', dir:1 };
 let activeQuickFilter = 'all';
 let selectedCode = '';
@@ -864,11 +930,12 @@ function buildParamPanel(d) {
   const params  = d.param_descriptions || {};
   const profile = d.profile || {};
   const source  = d.params?.source || '';
-  document.getElementById('strategy-meta').textContent = `${profile.name||''} · ${source}`;
   document.getElementById('update-time').textContent   = `更新 ${d.computed_at||''}`;
   if (d.latest_data_date) {
     setDataDateLabel(d);
   }
+  renderStrategyTabs(profileMap, d.profile_id || selectedProfileId);
+  renderStrategyParamStrip(profile, source);
   document.getElementById('param-panel').innerHTML = Object.entries(params).map(([k,v]) => {
     const formatParamValue = val => {
       if (typeof val !== 'number') return val || '-';
@@ -891,9 +958,8 @@ function buildParamPanel(d) {
 ───────────────────────────────────────────────── */
 function switchRightTab(tab) {
   activeRightTab = tab;
-  document.querySelectorAll('[data-rtab]').forEach(b => b.classList.toggle('active', b.dataset.rtab===tab));
-  document.getElementById('rpanel-params').style.display = tab==='params' ? '' : 'none';
-  document.getElementById('rpanel-detail').style.display = tab==='detail' ? '' : 'none';
+  const detail = document.getElementById('rpanel-detail');
+  if (detail) detail.style.display = '';
 }
 
 /* ─────────────────────────────────────────────────
@@ -1335,6 +1401,74 @@ function fillStrategySelect(profiles, active) {
   const sel = document.getElementById('strategy-select');
   sel.innerHTML = Object.values(profiles).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
   if (active && profiles[active]) sel.value = active;
+  renderStrategyTabs(profiles, active);
+  renderStrategyParamStrip(profiles[active] || {}, profiles[active]?.source || '');
+}
+
+function strategyTabLabel(profile) {
+  const name = profile?.name || profile?.id || '策略';
+  const fast = profile.macd_fast ?? profile.fast ?? '-';
+  const slow = profile.macd_slow ?? profile.slow ?? '-';
+  const signal = profile.macd_signal ?? profile.signal ?? '-';
+  if (name.includes('通达信参数')) return `通达信参数 · EMA(${fast},${slow},${signal})`;
+  if (name.includes('基准策略')) return `基准策略 · EMA(${fast},${slow},${signal})`;
+  if (name.includes('Optuna')) return `Optuna 最优 · EMA(${fast}/${slow}/${signal})`;
+  if (name.includes('参数组')) {
+    const m = name.match(/参数组\s*([A-Z])/);
+    return `参数组 ${m ? m[1] : ''} · EMA(${fast},${slow},${signal})`;
+  }
+  return name;
+}
+
+function orderedProfiles(profiles) {
+  const all = Object.values(profiles || {});
+  const preferred = ['tdx_12_26_9', 'macd_12_26_9', 'macd_10_22_8_h15', 'optuna_best', 'macd_14_30_11'];
+  const first = preferred.map(id => all.find(p => p.id === id)).filter(Boolean);
+  const rest = all.filter(p => !preferred.includes(p.id));
+  return [...first, ...rest];
+}
+
+function renderStrategyTabs(profiles, active) {
+  const wrap = document.getElementById('strategy-tabs');
+  if (!wrap) return;
+  wrap.innerHTML = orderedProfiles(profiles).map(p => {
+    const isActive = p.id === active;
+    return `<button class="strategy-tab ${isActive?'active':''}" data-strategy="${p.id}" onclick="selectStrategy('${p.id}')">${strategyTabLabel(p)}</button>`;
+  }).join('');
+}
+
+function renderStrategyParamStrip(profile, source='') {
+  const wrap = document.getElementById('strategy-param-strip');
+  if (!wrap || !profile) return;
+  const pct = v => Number.isFinite(Number(v)) ? `${Math.round(Number(v) * 100)}%` : '-';
+  const fast = profile.macd_fast ?? profile.fast ?? '-';
+  const slow = profile.macd_slow ?? profile.slow ?? '-';
+  const signal = profile.macd_signal ?? profile.signal ?? '-';
+  const volMin = profile.vol_ratio_min ?? profile.vol_min ?? 1.0;
+  const amtMin = profile.amt_ratio_min ?? profile.amt_min ?? 1.0;
+  const priceMax = profile.price_pos_max ?? profile.price_max;
+  const chips = [
+    `EMA(${fast},${slow},${signal})`,
+    `持仓 ${profile.holding_days ?? '-'} 天`,
+    `量比 ≥ ${fmtNum(volMin, 1, '-')}`,
+    `额比 ≥ ${fmtNum(amtMin, 1, '-')}`,
+    `位置 ≤ ${pct(priceMax)}`,
+  ];
+  wrap.innerHTML = chips.map(c => `<span class="param-chip">${c}</span>`).join('')
+    + (source ? `<span class="param-source">${source}</span>` : '')
+    + `<button class="param-toggle" onclick="toggleParamDetail()" id="param-toggle">${isParamDetailOpen() ? '收起说明' : '查看参数说明'}</button>`;
+}
+
+function isParamDetailOpen() {
+  return document.getElementById('param-detail')?.classList.contains('open');
+}
+
+function toggleParamDetail() {
+  const detail = document.getElementById('param-detail');
+  if (!detail) return;
+  detail.classList.toggle('open');
+  const btn = document.getElementById('param-toggle');
+  if (btn) btn.textContent = detail.classList.contains('open') ? '收起说明' : '查看参数说明';
 }
 
 async function loadData() {
@@ -1378,8 +1512,13 @@ function pollStatus() {
   }, 1200);
 }
 
-async function onStrategyChange() {
-  selectedProfileId = document.getElementById('strategy-select').value;
+async function selectStrategy(profileId) {
+  if (!profileId || profileId === selectedProfileId) return;
+  selectedProfileId = profileId;
+  const sel = document.getElementById('strategy-select');
+  if (sel) sel.value = profileId;
+  renderStrategyTabs(profileMap, selectedProfileId);
+  renderStrategyParamStrip(profileMap[selectedProfileId] || {}, profileMap[selectedProfileId]?.source || '');
   destroyCharts();
   const readyCheck = await fetch(`/api/ready/${encodeURIComponent(selectedProfileId)}`).then(r=>r.json()).catch(()=>null);
   if (readyCheck && readyCheck.ready) {
@@ -1394,6 +1533,10 @@ async function onStrategyChange() {
     await fetch(`/api/refresh?strategy=${encodeURIComponent(selectedProfileId)}`,{method:'POST'});
     pollStatus();
   }
+}
+
+async function onStrategyChange() {
+  await selectStrategy(document.getElementById('strategy-select').value);
 }
 
 async function refreshCurrent() {
