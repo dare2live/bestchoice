@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MACD 选股台</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #f3f5f9;
+  --surface: #ffffff;
+  --border: #d8dee9;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --green: #22c55e;
+  --yellow: #eab308;
+  --blue: #3b82f6;
+  --red: #ef4444;
+  --gold: #d97706;
+  --green-bg: rgba(34,197,94,.12);
+  --yellow-bg: rgba(234,179,8,.12);
+  --blue-bg: rgba(59,130,246,.12);
+  --red-bg: rgba(239,68,68,.12);
+  --gray-bg: rgba(107,114,128,.10);
+  --gold-bg: rgba(217,119,6,.12);
+  --shadow: 0 2px 12px rgba(15,23,42,.06);
+  --tab-h: 44px;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  color: var(--text);
+  background: var(--bg);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Topbar ─────────────────────────────────────── */
+#topbar {
+  flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 18px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  z-index: 20;
+}
+#topbar h1 { margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap; }
+#topbar .meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
+#topbar .gap { flex: 1; }
+
+#strategy-select {
+  min-width: 220px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font: inherit;
+}
+.btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
+}
+.btn:hover { background: #eef2ff; }
+
+#status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--yellow); display: inline-block; flex-shrink: 0;
+}
+#status-dot.ready { background: var(--green); }
+#status-text { font-size: 12px; color: var(--muted); }
+
+/* ── KPI Cards ───────────────────────────────────── */
+.cards-row {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  padding: 10px 18px 0;
+}
+.card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.card-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.card-value { margin-top: 2px; font-size: 22px; line-height: 1.1; font-weight: 700; }
+.card-sub { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.c-green  .card-value { color: var(--green); }
+.c-yellow .card-value { color: var(--yellow); }
+.c-blue   .card-value { color: var(--blue); }
+.c-red    .card-value { color: var(--red); }
+.c-gray   .card-value { color: var(--muted); }
+.c-gold   .card-value { color: var(--gold); }
+
+/* ── Main layout ─────────────────────────────────── */
+.main-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 10px;
+  padding: 10px 18px 12px;
+  min-height: 0;
+}
+
+/* ── Panel ───────────────────────────────────────── */
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ── Tab strip ───────────────────────────────────── */
+.tab-strip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  min-height: var(--tab-h);
+}
+.tab-btn {
+  padding: 5px 14px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: 600 13px/1.4 inherit;
+  white-space: nowrap;
+  transition: background .12s, color .12s;
+}
+.tab-btn:hover { background: var(--bg); color: var(--text); }
+.tab-btn.active {
+  background: var(--blue-bg);
+  color: var(--blue);
+  border-color: rgba(59,130,246,.25);
+}
+.tab-sep { flex: 1; }
+
+/* ── Toolbar (left panel) ────────────────────────── */
+.toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.count-label { font-size: 12px; color: var(--muted); }
+.filter-input, .filter-select, .num-op {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  color: var(--text);
+  font: inherit;
+  padding: 4px 7px;
+}
+#global-search { flex: 1; min-width: 180px; max-width: 300px; }
+.filter-number { display: grid; grid-template-columns: 52px 1fr; gap: 3px; }
+.filter-number .num-op { padding: 4px 4px; font-size: 11px; }
+.filter-number .filter-input { min-width: 0; }
+
+/* ── Table ───────────────────────────────────────── */
+.table-wrap { flex: 1; overflow: auto; min-height: 0; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+th, td {
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+thead th {
+  background: #f8fafc;
+  position: sticky; top: 0; z-index: 2;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.filter-row th {
+  background: #fbfdff;
+  position: sticky; top: 35px; z-index: 1;
+  padding: 4px 6px;
+}
+th[data-sort] { cursor: pointer; user-select: none; }
+th[title] { cursor: help; }
+th[data-sort][title] { cursor: pointer; }
+.sort-arrow { float: right; color: var(--muted); font-size: 10px; }
+tbody tr:hover { background: #f1f5f9; }
+tbody tr.selected { background: #dbeafe; }
+td { font-size: 13px; }
+
+/* ── Badges ──────────────────────────────────────── */
+.badge {
+  display: inline-block; border-radius: 999px;
+  padding: 2px 8px; font-size: 11px; font-weight: 600;
+}
+.badge-green  { background: var(--green-bg);  color: var(--green); }
+.badge-yellow { background: var(--yellow-bg); color: var(--yellow); }
+.badge-blue   { background: var(--blue-bg);   color: var(--blue); }
+.badge-red    { background: var(--red-bg);     color: var(--red); }
+.badge-gray   { background: var(--gray-bg);    color: #374151; }
+.badge-gold   { background: var(--gold-bg);    color: var(--gold); }
+.num-pos { color: var(--green); }
+.num-neg { color: var(--red); }
+.cell-code { font-weight: 700; }
+.cell-name { color: var(--muted); font-size: 12px; }
+
+/* ── Pick cards (今日推荐 tab) ──────────────────── */
+#picks-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  min-height: 0;
+}
+.picks-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.picks-section-title .section-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: var(--green-bg);
+  color: var(--green);
+}
+.picks-section-title .section-badge.watch {
+  background: var(--yellow-bg);
+  color: var(--yellow);
+}
+.picks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.pick-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: box-shadow .15s, transform .1s;
+  border-left: 4px solid var(--border);
+  position: relative;
+}
+.pick-card:hover { box-shadow: 0 4px 18px rgba(15,23,42,.12); transform: translateY(-1px); }
+.pick-card.score-high  { border-left-color: var(--green); }
+.pick-card.score-mid   { border-left-color: var(--yellow); }
+.pick-card.score-low   { border-left-color: var(--muted); }
+.pick-card .pc-header  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.pick-card .pc-code    { font-weight: 700; font-size: 14px; }
+.pick-card .pc-name    { color: var(--muted); font-size: 11px; margin-top: 1px; }
+.pick-card .pc-score   {
+  font-size: 11px; font-weight: 700; padding: 2px 7px;
+  border-radius: 99px; background: var(--green-bg); color: var(--green);
+}
+.pick-card.score-mid .pc-score  { background: var(--yellow-bg); color: var(--yellow); }
+.pick-card.score-low .pc-score  { background: var(--gray-bg);   color: var(--muted); }
+.pick-card .pc-metrics {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 3px 6px;
+  margin-top: 6px;
+}
+.pick-card .pc-m { display: flex; flex-direction: column; }
+.pick-card .pc-ml { font-size: 10px; color: var(--muted); }
+.pick-card .pc-mv { font-size: 12px; font-weight: 600; }
+.pick-card .pc-footer {
+  margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--muted);
+  display: flex; align-items: center; gap: 5px;
+}
+.pick-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+}
+.pick-empty .pe-icon { font-size: 32px; margin-bottom: 8px; }
+.pick-empty .pe-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+
+/* ── Horizon table ───────────────────────────────── */
+.horizon-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.horizon-table th {
+  background: #f8fafc;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  font-weight: 600;
+}
+.horizon-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  white-space: nowrap;
+}
+.horizon-table tr.best-row td { background: #fffbeb; font-weight: 700; }
+.horizon-table tr.best-row td:first-child::after { content: ' ★'; color: var(--gold); font-size: 11px; }
+
+/* ── Right panel ─────────────────────────────────── */
+.right-panel { overflow: hidden; }
+.rpanel-content { flex: 1; overflow-y: auto; padding: 12px; min-height: 0; }
+
+/* ── Param cards ─────────────────────────────────── */
+.param-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.param-card {
+  border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; background: #fbfdff;
+}
+.param-name  { font-size: 11px; color: var(--muted); }
+.param-value { font-size: 18px; font-weight: 700; margin-top: 2px; }
+.param-desc  { margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.param-hints { margin-top: 4px; color: #9ca3af; font-size: 10.5px; line-height: 1.5; }
+
+/* ── Detail panel ────────────────────────────────── */
+#rec-box {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px; margin-bottom: 10px;
+}
+#rec-box.rec-buy  { border-color: #86efac; background: #f0fdf4; }
+#rec-box.rec-warn { border-color: #fde68a; background: #fffbeb; }
+#rec-box.rec-hold { border-color: #bfdbfe; background: #eff6ff; }
+#rec-box.rec-sell { border-color: #fecaca; background: #fef2f2; }
+#rec-box.rec-wait { border-color: var(--border); background: #f8fafc; }
+#rec-title { font-weight: 700; font-size: 14px; }
+#rec-desc  { color: var(--muted); margin-top: 5px; font-size: 12px; }
+
+.d-section { margin-bottom: 10px; }
+.d-section-title {
+  font-size: 10px; text-transform: uppercase; color: var(--muted);
+  letter-spacing: .04em; margin-bottom: 6px; font-weight: 600;
+}
+.d-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.d-cell {
+  border: 1px solid var(--border); border-radius: 7px;
+  padding: 7px 9px; background: #fbfdff;
+}
+.d-cell-label { font-size: 11px; color: var(--muted); line-height: 1.2; }
+.d-cell-label[title] { cursor: help; text-decoration: underline dotted var(--border); text-underline-offset: 3px; }
+.d-cell-value { margin-top: 2px; font-size: 14px; font-weight: 600; }
+
+/* Timing section */
+.timing-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+}
+.timing-cell {
+  border: 1px solid var(--border); border-radius: 7px;
+  padding: 7px 9px; background: #fbfdff;
+}
+.timing-label { font-size: 11px; color: var(--muted); }
+.timing-value { margin-top: 2px; font-size: 14px; font-weight: 600; }
+
+/* Score bar */
+.score-bar-wrap { margin-top: 4px; }
+.score-bar-bg { height: 5px; border-radius: 3px; background: var(--bg); margin-top: 4px; }
+.score-bar-fill { height: 5px; border-radius: 3px; background: var(--green); transition: width .3s; }
+
+#chart-price, #chart-macd { width: 100%; height: 140px !important; }
+#chart-wrap-macd { margin-top: 6px; }
+
+/* ── Loading overlay ─────────────────────────────── */
+#loading {
+  position: fixed; inset: 0;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(243,245,249,.92); z-index: 99;
+  flex-direction: column; gap: 10px;
+}
+#loading.show { display: flex; }
+#loading .spin {
+  width: 28px; height: 28px;
+  border: 3px solid var(--border); border-top-color: var(--blue);
+  border-radius: 50%; animation: spin .9s linear infinite;
+}
+#load-msg { color: var(--muted); font-size: 13px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Responsive ──────────────────────────────────── */
+@media (max-width: 1300px) {
+  .main-layout { grid-template-columns: minmax(0, 1fr) 360px; }
+}
+@media (max-width: 1100px) {
+  .main-layout { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+  .right-panel { max-height: 340px; }
+  .cards-row   { grid-template-columns: repeat(5, 1fr); }
+}
+@media (max-width: 900px) {
+  .cards-row   { grid-template-columns: repeat(3, 1fr); }
+  .main-layout { padding: 8px 10px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading"><div class="spin"></div><div id="load-msg">启动中</div></div>
+
+<!-- Topbar -->
+<div id="topbar">
+  <h1>MACD 选股台</h1>
+  <select id="strategy-select" onchange="onStrategyChange()"></select>
+  <span class="meta" id="strategy-meta"></span>
+  <div class="gap"></div>
+  <span id="status-dot"></span>
+  <span id="status-text">---</span>
+  <span class="meta" id="update-time"></span>
+  <span class="meta" id="data-date" title="行情数据最新交易日"></span>
+  <button class="btn" onclick="refreshCurrent()">重新计算</button>
+</div>
+
+<!-- KPI Cards -->
+<div class="cards-row" id="cards"></div>
+
+<!-- Main layout -->
+<div class="main-layout">
+
+  <!-- LEFT: tabbed panel -->
+  <div class="panel">
+    <!-- Left tabs -->
+    <div class="tab-strip">
+      <button class="tab-btn active" data-ltab="picks"  onclick="switchLeftTab('picks')">今日推荐</button>
+      <button class="tab-btn"        data-ltab="signal" onclick="switchLeftTab('signal')">信号台</button>
+      <button class="tab-btn"        data-ltab="hist"   onclick="switchLeftTab('hist')">历史绩效</button>
+      <div class="tab-sep"></div>
+      <span class="count-label" id="count-label"></span>
+    </div>
+
+    <!-- Toolbar (hidden in picks tab) -->
+    <div class="toolbar" id="table-toolbar">
+      <input id="global-search" class="filter-input" placeholder="搜索 代码/名称/行业/风格" oninput="applyFilters()">
+      <button class="btn" onclick="resetFilters()">清空筛选</button>
+    </div>
+
+    <!-- Picks panel -->
+    <div id="picks-panel" style="display:none">
+      <!-- content populated by renderPicks() -->
+    </div>
+
+    <!-- Table panel -->
+    <div class="table-wrap" id="table-panel">
+      <table id="stock-table">
+        <thead>
+          <tr id="header-row"></tr>
+          <tr id="filter-row" class="filter-row"></tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RIGHT: detail + params -->
+  <div class="panel right-panel">
+    <!-- Right tabs -->
+    <div class="tab-strip">
+      <button class="tab-btn active" data-rtab="params" onclick="switchRightTab('params')">参数说明</button>
+      <button class="tab-btn"        data-rtab="detail" onclick="switchRightTab('detail')">股票详情</button>
+    </div>
+
+    <!-- Params content -->
+    <div id="rpanel-params" class="rpanel-content">
+      <div id="param-panel" class="param-grid"></div>
+    </div>
+
+    <!-- Detail content -->
+    <div id="rpanel-detail" class="rpanel-content" style="display:none">
+
+      <!-- Recommendation box -->
+      <div id="rec-box" class="rec-wait">
+        <div id="rec-title"></div>
+        <div id="rec-desc"></div>
+      </div>
+
+      <!-- 买卖时机 -->
+      <div class="d-section">
+        <div class="d-section-title">买卖时机</div>
+        <div class="timing-grid">
+          <div class="timing-cell">
+            <div class="timing-label">当前操作</div>
+            <div class="timing-value" id="d-action">—</div>
+          </div>
+          <div class="timing-cell">
+            <div class="timing-label">最优持仓期</div>
+            <div class="timing-value" id="d-best-hp">—</div>
+          </div>
+          <div class="timing-cell">
+            <div class="timing-label">卖出建议</div>
+            <div class="timing-value" id="d-sell-hint">—</div>
+          </div>
+          <div class="timing-cell">
+            <div class="timing-label">综合评分</div>
+            <div class="timing-value" id="d-score">—</div>
+            <div class="score-bar-wrap">
+              <div class="score-bar-bg"><div class="score-bar-fill" id="d-score-bar" style="width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 持仓期分析 -->
+      <div class="d-section">
+        <div class="d-section-title">持仓期分析</div>
+        <table class="horizon-table">
+          <thead>
+            <tr>
+              <th>持股天</th>
+              <th>胜率</th>
+              <th>均收益</th>
+              <th>均回撤</th>
+              <th>Calmar</th>
+              <th>样本数</th>
+            </tr>
+          </thead>
+          <tbody id="d-horizons-body">
+            <tr><td colspan="6" style="color:var(--muted);text-align:center">请选择股票</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 当前状态 -->
+      <div class="d-section">
+        <div class="d-section-title">当前状态</div>
+        <div class="d-grid">
+          <div class="d-cell"><div class="d-cell-label">代码 / 名称</div><div class="d-cell-value" id="d-code">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="刚金叉=最强信号 | 即将金叉=提前布局 | 持仓期=继续持有 | 刚死叉=风险上升 | 等待=无近期信号">状态</div><div class="d-cell-value" id="d-status">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="DIF=快EMA-慢EMA。正=零轴上方（多头趋势）；金叉时DIF由下穿上DEA">DIF</div><div class="d-cell-value" id="d-dif">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="DEA=DIF的EMA信号线。DIF上穿DEA为金叉，下穿为死叉">DEA</div><div class="d-cell-value" id="d-dea">—</div></div>
+          <div class="d-cell"><div class="d-cell-label">收盘价</div><div class="d-cell-value" id="d-close">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="DIF当前值：正=零轴上方（多头，金叉更可信）；负=零轴下方（超跌反弹型）">DIF 距零轴</div><div class="d-cell-value" id="d-gap">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="当日成交额/近20日均额。>1.5：量能放大，金叉共振有效；<0.8：缩量，可信度偏弱">额比</div><div class="d-cell-value" id="d-amtr">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="当前收盘/近60日最高价。<40%：低位安全边际高；>80%：接近高点追高风险大">价格位置</div><div class="d-cell-value" id="d-price60">—</div></div>
+        </div>
+      </div>
+
+      <!-- 标的信息 -->
+      <div class="d-section">
+        <div class="d-section-title">标的信息</div>
+        <div class="d-grid">
+          <div class="d-cell"><div class="d-cell-label">行业</div><div class="d-cell-value" id="d-ind">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="市值风格：大/中/小盘 + 成长/价值/均衡">风格</div><div class="d-cell-value" id="d-type">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="最近报告期股东户数环比。负=筹码集中（可能主力控盘）；正=筹码分散">股东变化</div><div class="d-cell-value" id="d-hchg">—</div></div>
+          <div class="d-cell"><div class="d-cell-label">最近金叉</div><div class="d-cell-value" id="d-lgc">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="F1：量价综合选股（短期放量突破形态）">F1 命中</div><div class="d-cell-value" id="d-f1">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="F3：价值低位选股（低价位+低估值形态）">F3 命中</div><div class="d-cell-value" id="d-f3">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="F5：趋势加速选股（均线多头排列+量能加速）">F5 命中</div><div class="d-cell-value" id="d-f5">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="同时命中F1/F3/F5数量（0-3）。3=三公式共振最强">命中数</div><div class="d-cell-value" id="d-hitcnt">—</div></div>
+        </div>
+      </div>
+
+      <!-- 历史回测 -->
+      <div class="d-section">
+        <div class="d-section-title">历史回测绩效</div>
+        <div class="d-grid">
+          <div class="d-cell"><div class="d-cell-label" title="回测区间内有效金叉信号总数。≥5次统计才可靠">信号次数</div><div class="d-cell-value" id="d-sig">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="历史有效=样本充足；样本不足=数据区间短；无有效信号=未出现金叉；信号不足=次数少于阈值">历史状态</div><div class="d-cell-value" id="d-hist-status">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="历史金叉后按持仓期卖出盈利占比。>60%稳健；<40%策略效果差">历史胜率</div><div class="d-cell-value" id="d-wr">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="历史所有金叉持仓期平均收益率。正数越高越好；负数说明历史买入大多亏损">均收益</div><div class="d-cell-value" id="d-ret">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="Calmar=均收益/均回撤绝对值。>2.0优秀；>1.0良好；<0.5性价比低">Calmar</div><div class="d-cell-value" id="d-cal">—</div></div>
+          <div class="d-cell"><div class="d-cell-label" title="持仓期最大浮亏均值（负数越接近0越好）。<-15%说明波动大">均回撤</div><div class="d-cell-value" id="d-dd">—</div></div>
+        </div>
+      </div>
+
+      <!-- MACD chart -->
+      <div class="d-section" id="charts">
+        <div class="d-section-title">MACD 走势（最近 90 日）</div>
+        <div id="chart-wrap-price"><canvas id="chart-price"></canvas></div>
+        <div id="chart-wrap-macd"><canvas id="chart-macd"></canvas></div>
+      </div>
+
+    </div><!-- /rpanel-detail -->
+  </div><!-- /right-panel -->
+
+</div><!-- /main-layout -->
+
+<script>
+/* ─────────────────────────────────────────────────
+   Constants
+───────────────────────────────────────────────── */
+const STATUS_ORDER = { '刚金叉':1,'即将金叉':2,'持仓期':3,'刚死叉':4,'等待':5 };
+const STATUS_BADGE = {
+  '刚金叉' :'<span class="badge badge-green">刚金叉</span>',
+  '即将金叉':'<span class="badge badge-yellow">即将金叉</span>',
+  '持仓期' :'<span class="badge badge-blue">持仓期</span>',
+  '刚死叉' :'<span class="badge badge-red">刚死叉</span>',
+  '等待'   :'<span class="badge badge-gray">等待</span>',
+};
+const HISTORY_STATUS_LABELS = {
+  ok:'历史有效', insufficient_history:'历史样本不足',
+  no_signal:'无有效信号', too_few_signals:'信号不足',
+  pending:'历史待补', none:'无历史',
+};
+const HISTORY_STATUS_ORDER = { insufficient_history:1,no_signal:2,too_few_signals:3,none:4,pending:5,ok:99 };
+const HOLDING_PERIODS = [5, 10, 15, 20, 30, 60];
+
+const METRIC_HELP = {
+  status:         { desc:'当前MACD金叉/死叉/持仓状态', high:'刚金叉为最强信号', low:'等待表示无近期金叉' },
+  dif_positive:   { desc:'DIF线（快EMA-慢EMA）是否在零轴上方', high:'上方：多头趋势，金叉更可信', low:'下方：超跌反弹性质，需谨慎' },
+  cur_amt_r20:    { desc:'当日成交额/近20日均额（量能放大倍数）', high:'>1.5：量能明显放大，金叉共振有效', low:'<0.8：缩量，金叉可信度偏弱' },
+  cur_price60:    { desc:'当前收盘/近60日最高价（%），输入百分数如40表示40%', high:'>80%：接近高点，追高风险大', low:'<40%：低位，安全边际高' },
+  f1_hit:         { desc:'通达信F1：量价综合选股（放量突破形态）', high:'命中：满足短期量能条件', low:'未命中：不满足F1形态' },
+  f3_hit:         { desc:'通达信F3：价值低位选股（低价位+低估值）', high:'命中：相对价值低估区域', low:'未命中：估值偏高或不在低位' },
+  f5_hit:         { desc:'通达信F5：趋势加速选股（均线多头+量能加速）', high:'命中：趋势强劲加速', low:'未命中：趋势未形成明显加速' },
+  formula_hit_count:{ desc:'同时命中F1/F3/F5数量（0-3），越多越强', high:'3：三公式共振', low:'0：纯MACD信号' },
+  signal_count:   { desc:'历史回测区间内有效金叉信号总数', high:'越多统计意义越强（建议≥5）', low:'<3次结论不可靠' },
+  win_rate:       { desc:'历史金叉后持仓期盈利占比（%），输入百分数', high:'>60%表现稳健', low:'<40%策略效果差' },
+  avg_ret:        { desc:'历史金叉持仓期平均收益率（%），输入百分数', high:'正数越高越好', low:'负数说明历史大多亏损' },
+  calmar:         { desc:'均收益/均回撤绝对值，收益-回撤综合比', high:'>2.0优秀；>1.0良好', low:'<0.5性价比低' },
+  avg_dd:         { desc:'持仓期最大浮亏均值（%，负数），输入百分数如-10', high:'接近0：回撤极小', low:'<-15%：波动大' },
+  last_gc_date:   { desc:'最近一次DIF上穿DEA（金叉）的日期' },
+  history_status: { desc:'历史回测数据完整性', high:'历史有效：样本充足', low:'样本不足/无信号：数据不可信' },
+  holder_chg:     { desc:'最近报告期股东户数环比变化', high:'正：筹码分散（散户涌入）', low:'负：筹码集中（可能主力控盘）' },
+  best_holding_days:{ desc:'历史上Calmar最高的持仓天数', high:'越接近实际持仓期越好', low:'偏差大说明需要调整策略持仓期' },
+};
+
+/* ── Signal tab columns ── */
+const SIGNAL_COLUMNS = [
+  { key:'status',            label:'状态',    filterType:'select',       options:()=>['','刚金叉','即将金叉','持仓期','刚死叉','等待'], width:86 },
+  { key:'code',              label:'代码',    filterType:'text',          width:70, display:r=>`<span class="cell-code">${r.code}</span>` },
+  { key:'name',              label:'名称',    filterType:'text',          width:100, display:r=>`<span class="cell-name">${r.name||''}</span>` },
+  { key:'win_rate',          label:'胜率',    filterType:'number', filterScale:100, width:64, display:r=>fmtPct(r.win_rate,1,'—') },
+  { key:'avg_ret',           label:'均收益',  filterType:'number', filterScale:100, width:72, display:r=>fmtSignedPct(r.avg_ret,2,'—') },
+  { key:'avg_dd',            label:'均回撤',  filterType:'number', filterScale:100, width:72, display:r=>fmtSignedPct(r.avg_dd,2,'—') },
+  { key:'calmar',            label:'Calmar',  filterType:'number',        width:66, display:r=>fmtNum(r.calmar,2,'—') },
+  { key:'is_buy_point',      label:'买点',    filterType:'bool',          width:48, display:r=>r.is_buy_point?'<span style="color:var(--gold);font-size:14px">★</span>':'—' },
+  { key:'sell_hint_display', label:'持仓提示',filterType:'text',          width:130, display:r=>renderSellHintCell(r) },
+];
+
+/* ── History tab columns ── */
+const HIST_COLUMNS = [
+  { key:'code',              label:'代码',    filterType:'text',          width:70, display:r=>`<span class="cell-code">${r.code}</span>` },
+  { key:'name',              label:'名称',    filterType:'text',          width:100, display:r=>`<span class="cell-name">${r.name||''}</span>` },
+  { key:'signal_count',      label:'信号数',  filterType:'number',        width:60 },
+  { key:'win_rate',          label:'胜率',    filterType:'number', filterScale:100, width:64, display:r=>fmtPct(r.win_rate,1,'—') },
+  { key:'avg_ret',           label:'均收益',  filterType:'number', filterScale:100, width:72, display:r=>fmtSignedPct(r.avg_ret,2,'—') },
+  { key:'avg_dd',            label:'均回撤',  filterType:'number', filterScale:100, width:72, display:r=>fmtSignedPct(r.avg_dd,2,'—') },
+  { key:'calmar',            label:'Calmar',  filterType:'number',        width:66, display:r=>fmtNum(r.calmar,2,'—') },
+  { key:'best_holding_days', label:'最优持仓期',filterType:'number',      width:84, display:r=>r.best_holding_days!=null?`${r.best_holding_days}天`:'—' },
+  { key:'history_status',    label:'历史状态',filterType:'select', options:()=>['',...Object.values(HISTORY_STATUS_LABELS)], width:90 },
+];
+
+/* ─────────────────────────────────────────────────
+   State
+───────────────────────────────────────────────── */
+let allStocks = [];
+let filtered  = [];
+let chartPrice = null, chartMacd = null;
+let activeLeftTab  = 'picks';
+let activeRightTab = 'params';
+let tabSort = {
+  signal: { key:'status', dir:1 },
+  hist:   { key:'calmar', dir:-1 },
+};
+let selectedCode = '';
+let pollTimer = null;
+let selectedProfileId = '';
+let profileMap = {};
+
+function getCols() {
+  if (activeLeftTab === 'signal') return SIGNAL_COLUMNS;
+  if (activeLeftTab === 'hist')   return HIST_COLUMNS;
+  return SIGNAL_COLUMNS;
+}
+function getSort() { return tabSort[activeLeftTab] || tabSort.signal; }
+
+/* ─────────────────────────────────────────────────
+   Formatters
+───────────────────────────────────────────────── */
+function fmtNum(v, d=2, na='—') {
+  if (v==null||v===''||Number.isNaN(v)) return na;
+  const n=Number(v); return Number.isFinite(n)?n.toFixed(d):na;
+}
+function fmtPct(v, d=1, na='—') {
+  if (v==null||v===''||Number.isNaN(v)) return na;
+  const n=Number(v); return Number.isFinite(n)?(n*100).toFixed(d)+'%':na;
+}
+function fmtSignedPct(v, d=2, na='—') {
+  if (v==null||v===''||Number.isNaN(v)) return na;
+  const n=Number(v); if(!Number.isFinite(n)) return na;
+  const s=`${(n*100).toFixed(d)}%`;
+  return n>=0?`<span class="num-pos">+${s}</span>`:`<span class="num-neg">${s}</span>`;
+}
+function hitBadge(v) {
+  return v ? '<span style="color:var(--green);font-weight:700">是</span>'
+           : '<span style="color:var(--muted)">否</span>';
+}
+function histStatusCode(r) {
+  if (r.history_status) return String(r.history_status);
+  return r.has_history ? 'ok' : 'none';
+}
+function histStatusText(r) {
+  return HISTORY_STATUS_LABELS[histStatusCode(r)] || '—';
+}
+
+function renderSellHintCell(r) {
+  if (r.status === '持仓期' && r.sell_hint) {
+    return `<span style="font-size:11px;color:var(--blue)">${r.sell_hint}</span>`;
+  }
+  if (r.status === '即将金叉' && r.days_event != null) {
+    return `<span style="font-size:11px;color:var(--yellow)">预计${r.days_event}天金叉</span>`;
+  }
+  if (r.status === '刚金叉' && r.days_event != null) {
+    return `<span style="font-size:11px;color:var(--green)">金叉${r.days_event}天</span>`;
+  }
+  return '—';
+}
+
+/* ─────────────────────────────────────────────────
+   KPI Cards
+───────────────────────────────────────────────── */
+function buildCards(s) {
+  const items = [
+    { label:'今日推荐', v:s.today_picks||0,  cls:'c-gold',   sub:'强烈推荐买点' },
+    { label:'刚金叉',   v:s.just_cross||0,   cls:'c-green',  sub:'窗口内（≤5天）' },
+    { label:'即将金叉', v:s.imminent||0,     cls:'c-yellow', sub:'预计5天内穿越' },
+    { label:'持仓期',   v:s.holding||0,      cls:'c-blue',   sub:'已金叉待持仓' },
+    { label:'历史有效', v:s.with_history||0, cls:'c-gray',   sub:`共 ${s.total||0} 只` },
+  ];
+  document.getElementById('cards').innerHTML = items.map(i=>
+    `<div class="card ${i.cls}">
+       <div class="card-label">${i.label}</div>
+       <div class="card-value">${i.v}</div>
+       <div class="card-sub">${i.sub}</div>
+     </div>`
+  ).join('');
+}
+
+/* ─────────────────────────────────────────────────
+   Param panel
+───────────────────────────────────────────────── */
+function buildParamPanel(d) {
+  const params  = d.param_descriptions || {};
+  const profile = d.profile || {};
+  const source  = d.params?.source || '';
+  document.getElementById('strategy-meta').textContent = `${profile.name||''} · ${source}`;
+  document.getElementById('update-time').textContent   = `更新 ${d.computed_at||''}`;
+  if (d.latest_data_date) {
+    document.getElementById('data-date').textContent = `数据至 ${d.latest_data_date}`;
+  }
+  document.getElementById('param-panel').innerHTML = Object.entries(params).map(([k,v]) => {
+    const val = Array.isArray(v.value) ? v.value.join(' / ') : v.value;
+    const vt  = typeof val==='number' ? String(val) : (val||'-');
+    return `<div class="param-card">
+      <div class="param-name">${v.label}</div>
+      <div class="param-value">${vt}</div>
+      <div class="param-desc">${v.desc}</div>
+      ${(v.low_hint||v.high_hint)?`<div class="param-hints">偏低：${v.low_hint||'—'}<br>偏高：${v.high_hint||'—'}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+/* ─────────────────────────────────────────────────
+   Tab switching
+───────────────────────────────────────────────── */
+function switchLeftTab(tab) {
+  activeLeftTab = tab;
+  document.querySelectorAll('[data-ltab]').forEach(b => b.classList.toggle('active', b.dataset.ltab===tab));
+
+  const picksPanel  = document.getElementById('picks-panel');
+  const tablePanel  = document.getElementById('table-panel');
+  const toolbar     = document.getElementById('table-toolbar');
+
+  if (tab === 'picks') {
+    picksPanel.style.display  = '';
+    tablePanel.style.display  = 'none';
+    toolbar.style.display     = 'none';
+    renderPicks();
+    document.getElementById('count-label').textContent = '';
+  } else {
+    picksPanel.style.display  = 'none';
+    tablePanel.style.display  = '';
+    toolbar.style.display     = '';
+    renderHeader();
+    applyFilters();
+  }
+}
+
+function switchRightTab(tab) {
+  activeRightTab = tab;
+  document.querySelectorAll('[data-rtab]').forEach(b => b.classList.toggle('active', b.dataset.rtab===tab));
+  document.getElementById('rpanel-params').style.display = tab==='params' ? '' : 'none';
+  document.getElementById('rpanel-detail').style.display = tab==='detail' ? '' : 'none';
+}
+
+/* ─────────────────────────────────────────────────
+   Today's picks rendering
+───────────────────────────────────────────────── */
+function scoreClass(score) {
+  if (score >= 60) return 'score-high';
+  if (score >= 35) return 'score-mid';
+  return 'score-low';
+}
+
+function buildPickCard(s) {
+  const sc = scoreClass(s.buy_score || 0);
+  const wr  = s.win_rate  != null ? fmtPct(s.win_rate, 1) : '—';
+  const ar  = s.avg_ret   != null ? `${(s.avg_ret*100).toFixed(1)}%` : '—';
+  const ad  = s.avg_dd    != null ? `${(s.avg_dd*100).toFixed(1)}%`  : '—';
+  const cal = s.calmar    != null ? Number(s.calmar).toFixed(2) : '—';
+  const badge = STATUS_BADGE[s.status] || s.status;
+  const fp = s.filter_pass ? '<span style="color:var(--green);font-size:10px">量价OK</span>' : '';
+  let footer = '';
+  if (s.status === '持仓期' && s.sell_hint) {
+    footer = s.sell_hint;
+  } else if (s.status === '刚金叉' && s.days_event != null) {
+    footer = `金叉 ${s.days_event} 天`;
+  } else if (s.status === '即将金叉' && s.days_event != null) {
+    footer = `预计 ${s.days_event} 天金叉`;
+  }
+  return `<div class="pick-card ${sc}" onclick="selectRowFromPick('${s.code}')">
+    <div class="pc-header">
+      <div>
+        <div class="pc-code">${s.code}</div>
+        <div class="pc-name">${s.name||''}</div>
+      </div>
+      <span class="pc-score">${s.buy_score!=null?s.buy_score:0}</span>
+    </div>
+    <div>${badge} ${fp}</div>
+    <div class="pc-metrics">
+      <div class="pc-m"><span class="pc-ml">胜率</span><span class="pc-mv">${wr}</span></div>
+      <div class="pc-m"><span class="pc-ml">均收益</span><span class="pc-mv">${ar}</span></div>
+      <div class="pc-m"><span class="pc-ml">均回撤</span><span class="pc-mv">${ad}</span></div>
+      <div class="pc-m"><span class="pc-ml">Calmar</span><span class="pc-mv">${cal}</span></div>
+    </div>
+    ${footer?`<div class="pc-footer">${footer}</div>`:''}
+  </div>`;
+}
+
+function renderPicks() {
+  const panel = document.getElementById('picks-panel');
+  const strong = allStocks.filter(s => s.is_buy_point);
+  const watch  = allStocks.filter(s => s.status === '刚金叉' && !s.is_buy_point);
+
+  let html = '';
+
+  if (strong.length === 0 && watch.length === 0) {
+    html = `<div class="pick-empty">
+      <div class="pe-icon">📭</div>
+      <div class="pe-title">暂无符合条件的今日买点</div>
+      <div style="color:var(--muted);font-size:12px;margin-top:4px">
+        可关注「信号台」中的即将金叉股票，提前布局。
+      </div>
+    </div>`;
+  } else {
+    if (strong.length > 0) {
+      html += `<div class="picks-section-title">强烈推荐 <span class="section-badge">${strong.length} 只</span></div>`;
+      html += `<div class="picks-grid">${strong.map(buildPickCard).join('')}</div>`;
+    }
+    if (watch.length > 0) {
+      html += `<div class="picks-section-title">近期关注 <span class="section-badge watch">${watch.length} 只</span></div>`;
+      const watchSorted = [...watch].sort((a,b)=>(b.buy_score||0)-(a.buy_score||0));
+      html += `<div class="picks-grid">${watchSorted.map(buildPickCard).join('')}</div>`;
+    }
+  }
+  panel.innerHTML = html;
+}
+
+function selectRowFromPick(code) {
+  selectedCode = code;
+  // Switch to detail
+  switchRightTab('detail');
+  const row = allStocks.find(x=>x.code===code);
+  if (row) fillDetail(row);
+}
+
+/* ─────────────────────────────────────────────────
+   Table header & filters
+───────────────────────────────────────────────── */
+function renderHeader() {
+  const cols = getCols();
+  const sort = getSort();
+  const hRow = document.getElementById('header-row');
+  const fRow = document.getElementById('filter-row');
+
+  hRow.innerHTML = cols.map(c => {
+    const isActive = c.key === sort.key;
+    const arrow = isActive
+      ? `<span class="sort-arrow">${sort.dir>0?'↑':'↓'}</span>`
+      : `<span class="sort-arrow">⇅</span>`;
+    const help = METRIC_HELP[c.key];
+    const tip  = help ? [help.desc, help.high&&'偏高：'+help.high, help.low&&'偏低：'+help.low].filter(Boolean).join('\n') : '';
+    const ta   = tip ? ` title="${tip.replace(/"/g,'&quot;')}"` : '';
+    return `<th data-sort="${c.key}" style="min-width:${c.width}px;width:${c.width}px"${ta}>${c.label}${arrow}</th>`;
+  }).join('');
+
+  fRow.innerHTML = cols.map(c => {
+    if (c.filterType==='select') {
+      const opts = (c.options&&c.options()) || [''];
+      return `<th><select class="filter-select" data-fkey="${c.key}" onchange="applyFilters()">${opts.map(v=>`<option value="${v}">${v||'全部'}</option>`).join('')}</select></th>`;
+    }
+    if (c.filterType==='bool') {
+      return `<th><select class="filter-select" data-fkey="${c.key}" onchange="applyFilters()"><option value="">全部</option><option value="1">是</option><option value="0">否</option></select></th>`;
+    }
+    if (c.filterType==='number') {
+      return `<th><div class="filter-number"><select class="num-op" data-fkey="${c.key}" data-part="op" onchange="applyFilters()"><option value="">—</option><option value=">=">≥</option><option value="<=">≤</option><option value=">">></option><option value="<"><</option><option value="==">=</option></select><input type="number" step="any" class="filter-input" data-fkey="${c.key}" data-part="val" oninput="applyFilters()"></div></th>`;
+    }
+    // text (including sell_hint_display pseudo-col)
+    return `<th><input class="filter-input" data-fkey="${c.key}" oninput="applyFilters()" placeholder="${c.label}"></th>`;
+  }).join('');
+
+  hRow.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      const s = getSort();
+      if (s.key===key) tabSort[activeLeftTab].dir = -s.dir;
+      else tabSort[activeLeftTab] = {key, dir:1};
+      renderTable();
+      document.querySelectorAll('#header-row th[data-sort] .sort-arrow').forEach(a => {
+        const k = a.closest('th').dataset.sort;
+        const ns = getSort();
+        a.textContent = k===ns.key ? (ns.dir>0?'↑':'↓') : '⇅';
+      });
+    });
+  });
+}
+
+function fkey(k, part) {
+  return part
+    ? document.querySelector(`[data-fkey="${k}"][data-part="${part}"]`)
+    : document.querySelector(`[data-fkey="${k}"]`);
+}
+
+function readFilters() {
+  const out = {};
+  for (const c of getCols()) {
+    const f = {type:c.filterType, filterScale:c.filterScale||1};
+    if (c.filterType==='number') {
+      f.op  = (fkey(c.key,'op')||{}).value||'';
+      f.val = (fkey(c.key,'val')||{}).value?.trim()||'';
+    } else {
+      f.val = (fkey(c.key)||{}).value?.trim()||'';
+    }
+    out[c.key] = f;
+  }
+  out._global = (document.getElementById('global-search').value||'').trim().toLowerCase();
+  return out;
+}
+
+function getCellVal(row, key) {
+  if (key==='dif_positive')     return row.dif_positive?'上方':'下方';
+  if (key==='history_status')   return histStatusText(row);
+  if (key==='sell_hint_display') return row.sell_hint||'';
+  if (key==='is_buy_point')     return row.is_buy_point;
+  return row[key];
+}
+
+function passFilter(row, filters) {
+  const g = filters._global;
+  if (g) {
+    const hay = `${row.code||''} ${row.name||''} ${row.industry||''} ${row.archetype||''}`.toLowerCase();
+    if (!hay.includes(g)) return false;
+  }
+  for (const c of getCols()) {
+    const cfg = filters[c.key];
+    const val = getCellVal(row, c.key);
+
+    if (cfg.type==='text') {
+      if (cfg.val && String(val||'').toLowerCase().indexOf(cfg.val.toLowerCase())===-1) return false;
+      continue;
+    }
+    if (cfg.type==='select') {
+      if (c.key==='history_status') {
+        if (cfg.val && histStatusText(row)!==cfg.val) return false;
+        continue;
+      }
+      if (cfg.val && String(val||'')!==cfg.val) return false;
+      continue;
+    }
+    if (cfg.type==='bool') {
+      if (!cfg.val) continue;
+      if (Boolean(val)!==(cfg.val==='1')) return false;
+      continue;
+    }
+    if (cfg.type==='number') {
+      if (!cfg.val||!cfg.op) continue;
+      const n = Number(val);
+      const target = Number(cfg.val) / cfg.filterScale;
+      if (!Number.isFinite(n)||!Number.isFinite(target)) { if(cfg.op) return false; continue; }
+      if (cfg.op==='>='&&!(n>=target)) return false;
+      if (cfg.op==='<='&&!(n<=target)) return false;
+      if (cfg.op==='>'&&!(n>target))   return false;
+      if (cfg.op==='<'&&!(n<target))   return false;
+      if (cfg.op==='=='&&!(n===target)) return false;
+    }
+  }
+  return true;
+}
+
+function comparator(a, b) {
+  const {key, dir} = getSort();
+  let va, vb;
+  if (key==='status')         { va=STATUS_ORDER[a.status]||99; vb=STATUS_ORDER[b.status]||99; }
+  else if (key==='history_status') { va=HISTORY_STATUS_ORDER[histStatusCode(a)]||99; vb=HISTORY_STATUS_ORDER[histStatusCode(b)]||99; }
+  else if (key==='dif_positive')   { va=a.dif_positive?1:0; vb=b.dif_positive?1:0; }
+  else if (key==='is_buy_point')   { va=a.is_buy_point?1:0; vb=b.is_buy_point?1:0; }
+  else { va=getCellVal(a,key); vb=getCellVal(b,key); }
+
+  if (typeof va==='boolean') va=va?1:0;
+  if (typeof vb==='boolean') vb=vb?1:0;
+  if (va==null) va = dir>0?Infinity:-Infinity;
+  if (vb==null) vb = dir>0?Infinity:-Infinity;
+  if (typeof va==='string') return dir*va.localeCompare(vb);
+  return dir*(Number(va)-Number(vb));
+}
+
+function applyFilters() {
+  const filters = readFilters();
+  filtered = allStocks.filter(r=>passFilter(r,filters));
+  filtered.sort(comparator);
+  document.getElementById('count-label').textContent = `显示 ${filtered.length} / ${allStocks.length} 条`;
+  renderTable();
+}
+
+/* ─────────────────────────────────────────────────
+   Table rendering
+───────────────────────────────────────────────── */
+function renderTable() {
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = filtered.slice(0,500).map(s =>
+    `<tr data-code="${s.code}" onclick="selectRow('${s.code}')">
+      ${getCols().map(c=>`<td title="${String(getCellVal(s,c.key)||'').replace(/"/g,'&quot;')}">${renderCell(c,s)}</td>`).join('')}
+    </tr>`
+  ).join('');
+  if (selectedCode) {
+    const r = tbody.querySelector(`tr[data-code="${selectedCode}"]`);
+    if (r) r.classList.add('selected');
+  }
+}
+
+function renderCell(c, row) {
+  if (c.display) return c.display(row);
+  if (c.key==='status')         return STATUS_BADGE[row.status]||row.status||'—';
+  if (c.key==='dif_positive')   return row.dif_positive?'上方':'下方';
+  if (c.key==='history_status') return histStatusText(row);
+  if (c.key==='signal_count') {
+    if (row.has_history) return row.signal_count||0;
+    const cd = histStatusCode(row);
+    if (cd==='insufficient_history'||cd==='too_few_signals') return '<span style="color:var(--muted);font-size:11px">样本不足</span>';
+    if (cd==='no_signal') return '<span style="color:var(--muted);font-size:11px">无信号</span>';
+    return '—';
+  }
+  const v = row[c.key];
+  return v==null ? '—' : String(v);
+}
+
+/* ─────────────────────────────────────────────────
+   Filter helpers
+───────────────────────────────────────────────── */
+function resetFilters() {
+  getCols().forEach(c => {
+    if (c.filterType==='number') {
+      const op=fkey(c.key,'op'); const vl=fkey(c.key,'val');
+      if(op) op.value=''; if(vl) vl.value='';
+    } else {
+      const el=fkey(c.key); if(el) el.value='';
+    }
+  });
+  document.getElementById('global-search').value='';
+  applyFilters();
+}
+
+/* ─────────────────────────────────────────────────
+   Row selection & detail panel
+───────────────────────────────────────────────── */
+function setRecommendation(s) {
+  const box = document.getElementById('rec-box');
+  if (s.is_buy_point) {
+    box.className='rec-box rec-buy';
+    document.getElementById('rec-title').textContent='强烈推荐买入';
+    document.getElementById('rec-desc').textContent=`金叉${s.days_event||'-'}天，量价过滤通过，历史胜率${s.win_rate!=null?(s.win_rate*100).toFixed(0)+'%':'未知'}，综合评分${s.buy_score||0}分。`;
+  } else if (s.status==='刚金叉') {
+    box.className='rec-box rec-buy';
+    document.getElementById('rec-title').textContent='买入窗口';
+    document.getElementById('rec-desc').textContent=`最近金叉后${s.days_event||'-'}天，建议关注回踩低吸。${s.filter_pass?'满足入场过滤条件':'当前不满足部分入场过滤'}`;
+  } else if (s.status==='即将金叉') {
+    box.className='rec-box rec-warn';
+    document.getElementById('rec-title').textContent='金叉预警';
+    document.getElementById('rec-desc').textContent=`DIF 与 DEA 快速收敛，预计 ${s.days_event||'-'} 天内出现金叉。`;
+  } else if (s.status==='持仓期') {
+    box.className='rec-box rec-hold';
+    document.getElementById('rec-title').textContent='持仓中';
+    document.getElementById('rec-desc').textContent=`最近金叉 ${s.last_gc_date||'未知'}，按固定周期执行。${s.sell_hint||''}`;
+  } else if (s.status==='刚死叉') {
+    box.className='rec-box rec-sell';
+    document.getElementById('rec-title').textContent='风险提示';
+    document.getElementById('rec-desc').textContent='DIF 由上穿回下方，持仓风险上升，建议审视仓位。';
+  } else {
+    box.className='rec-box rec-wait';
+    document.getElementById('rec-title').textContent='等待信号';
+    document.getElementById('rec-desc').textContent='未检测到新的金叉事件，持续观察。';
+  }
+}
+
+function fillHorizonTable(row) {
+  const bestHp  = row.best_holding_days;
+  const horizons = row.horizons || {};
+  const tbody = document.getElementById('d-horizons-body');
+  if (Object.keys(horizons).length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:10px">无历史持仓期数据</td></tr>';
+    return;
+  }
+  tbody.innerHTML = HOLDING_PERIODS.map(h => {
+    const hk = String(h);
+    const hm = horizons[hk] || horizons[h];
+    const isBest = bestHp == h;
+    const cls = isBest ? 'best-row' : '';
+    if (!hm) {
+      return `<tr class="${cls}"><td>${h}</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>`;
+    }
+    const wr  = hm.win_rate  != null ? (hm.win_rate*100).toFixed(1)+'%' : '—';
+    const ar  = hm.avg_ret   != null ? (hm.avg_ret >0?'+':'')+(hm.avg_ret*100).toFixed(2)+'%' : '—';
+    const ad  = hm.avg_dd    != null ? (hm.avg_dd*100).toFixed(2)+'%' : '—';
+    const cal = hm.calmar    != null ? Number(hm.calmar).toFixed(2) : '—';
+    const n   = hm.n != null ? hm.n : '—';
+    const arClass = hm.avg_ret>0?'num-pos':'num-neg';
+    const adClass = hm.avg_dd>-0.05?'num-pos':'num-neg';
+    return `<tr class="${cls}">
+      <td>${h}</td>
+      <td>${wr}</td>
+      <td class="${arClass}">${ar}</td>
+      <td class="${adClass}">${ad}</td>
+      <td>${cal}</td>
+      <td>${n}</td>
+    </tr>`;
+  }).join('');
+}
+
+function fillDetail(row) {
+  setRecommendation(row);
+
+  // 买卖时机 section
+  let actionText = '等待';
+  if (row.is_buy_point)         actionText = '强烈推荐买入';
+  else if (row.status==='刚金叉')   actionText = '可考虑买入';
+  else if (row.status==='即将金叉') actionText = '提前关注';
+  else if (row.status==='持仓期')   actionText = '继续持有';
+  else if (row.status==='刚死叉')   actionText = '注意风险';
+
+  document.getElementById('d-action').textContent   = actionText;
+  document.getElementById('d-best-hp').textContent  = row.best_holding_days!=null ? `${row.best_holding_days} 天` : '—';
+
+  let sellHintText = row.sell_hint || '—';
+  if (!row.sell_hint && row.status==='即将金叉' && row.days_event!=null) {
+    sellHintText = `预计 ${row.days_event} 天金叉`;
+  }
+  document.getElementById('d-sell-hint').textContent = sellHintText;
+
+  const score = row.buy_score || 0;
+  document.getElementById('d-score').textContent = `${score} 分`;
+  document.getElementById('d-score-bar').style.width = Math.min(score, 100) + '%';
+  const barEl = document.getElementById('d-score-bar');
+  barEl.style.background = score>=60 ? 'var(--green)' : score>=35 ? 'var(--yellow)' : 'var(--muted)';
+
+  // 持仓期分析
+  fillHorizonTable(row);
+
+  // 当前状态
+  document.getElementById('d-code').textContent    = `${row.code} ${row.name||''}`;
+  document.getElementById('d-status').innerHTML    = STATUS_BADGE[row.status]||row.status||'—';
+  document.getElementById('d-dif').textContent     = row.cur_dif!=null?row.cur_dif.toFixed(4):'—';
+  document.getElementById('d-dea').textContent     = row.cur_dea!=null?row.cur_dea.toFixed(4):'—';
+  document.getElementById('d-close').textContent   = row.cur_close!=null?`¥${row.cur_close.toFixed(2)}`:'—';
+  document.getElementById('d-gap').textContent     = row.gap!=null?row.gap.toFixed(6):'—';
+  document.getElementById('d-amtr').textContent    = row.cur_amt_r20!=null?`${row.cur_amt_r20.toFixed(2)}x`:'—';
+  document.getElementById('d-price60').textContent = row.cur_price60!=null?`${(row.cur_price60*100).toFixed(0)}%`:'—';
+
+  // 标的信息
+  document.getElementById('d-ind').textContent     = row.industry||'—';
+  document.getElementById('d-type').textContent    = row.archetype||'—';
+  document.getElementById('d-hchg').textContent    = row.holder_chg!=null?`${(row.holder_chg*100).toFixed(1)}%`:'—';
+  document.getElementById('d-lgc').textContent     = row.last_gc_date||'—';
+  document.getElementById('d-f1').textContent      = row.f1_hit?'是':'否';
+  document.getElementById('d-f3').textContent      = row.f3_hit?'是':'否';
+  document.getElementById('d-f5').textContent      = row.f5_hit?'是':'否';
+  document.getElementById('d-hitcnt').textContent  = row.formula_hit_count??'—';
+
+  // 历史回测
+  document.getElementById('d-hist-status').textContent = histStatusText(row);
+  if (row.has_history) {
+    document.getElementById('d-sig').textContent = row.signal_count||0;
+  } else {
+    const cd = histStatusCode(row);
+    document.getElementById('d-sig').textContent =
+      cd==='insufficient_history'||cd==='too_few_signals' ? '样本不足' :
+      cd==='no_signal' ? '无有效信号' : '—';
+  }
+  document.getElementById('d-wr').textContent  = row.win_rate!=null?fmtPct(row.win_rate,1):'—';
+  document.getElementById('d-ret').innerHTML   = row.avg_ret!=null?fmtSignedPct(row.avg_ret,2):'—';
+  document.getElementById('d-cal').textContent = row.calmar!=null?Number(row.calmar).toFixed(2):'—';
+  document.getElementById('d-dd').innerHTML    = row.avg_dd!=null?fmtSignedPct(row.avg_dd,2):'—';
+}
+
+function selectRow(code) {
+  selectedCode = code;
+  const row = allStocks.find(x=>x.code===code);
+  if (!row) return;
+  document.querySelectorAll('#tbody tr').forEach(t=>t.classList.toggle('selected', t.dataset.code===code));
+  switchRightTab('detail');
+  fillDetail(row);
+  loadChart(code);
+}
+
+/* ─────────────────────────────────────────────────
+   Charts
+───────────────────────────────────────────────── */
+function destroyCharts() {
+  if (chartPrice) { chartPrice.destroy(); chartPrice=null; }
+  if (chartMacd)  { chartMacd.destroy();  chartMacd=null; }
+}
+
+async function loadChart(code) {
+  const q = selectedProfileId?`?strategy=${encodeURIComponent(selectedProfileId)}`:'';
+  const d = await fetch(`/api/chart/${code}${q}`).then(r=>r.json()).catch(()=>null);
+  if (!d||!d.dates||!d.dates.length) return;
+  destroyCharts();
+  const labels = d.dates.map(x=>String(x).slice(5));
+  const gc = new Set((d.crosses||[]).filter(c=>c.type==='golden').map(c=>c.idx));
+  const dc = new Set((d.crosses||[]).filter(c=>c.type==='death').map(c=>c.idx));
+  const n = labels.length;
+
+  chartPrice = new Chart(document.getElementById('chart-price').getContext('2d'), {
+    type:'line', data:{labels, datasets:[{
+      label:'收盘价', data:d.close, borderColor:'#3b82f6', borderWidth:1.5, fill:false, tension:0.2,
+      pointRadius:Array.from({length:n},(_,i)=>(gc.has(i)||dc.has(i))?5:0),
+      pointBackgroundColor:Array.from({length:n},(_,i)=>gc.has(i)?'#22c55e':dc.has(i)?'#ef4444':'transparent'),
+      pointStyle:Array.from({length:n},(_,i)=>(gc.has(i)||dc.has(i))?'triangle':'circle'),
+      pointRotation:Array.from({length:n},(_,i)=>dc.has(i)?180:0),
+    }]}, options:chartOpts('¥',false)
+  });
+
+  chartMacd = new Chart(document.getElementById('chart-macd').getContext('2d'), {
+    type:'bar', data:{labels, datasets:[
+      {type:'line',label:'DIF',data:d.dif,borderColor:'#f59e0b',borderWidth:1.5,pointRadius:0,tension:0.2,fill:false},
+      {type:'line',label:'DEA',data:d.dea,borderColor:'#3b82f6',borderWidth:1.5,pointRadius:0,tension:0.2,fill:false},
+      {type:'bar', label:'MACD',data:d.bar,backgroundColor:d.bar.map(v=>v>=0?'rgba(239,68,68,.64)':'rgba(34,197,94,.64)')},
+    ]}, options:{...chartOpts('',true),plugins:{legend:{display:true}}}
+  });
+}
+
+function chartOpts(prefix, zero) {
+  return {
+    responsive:true, maintainAspectRatio:false, animation:false,
+    interaction:{mode:'index',intersect:false},
+    plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${prefix}${ctx.raw}`}}},
+    scales:{
+      x:{grid:{color:'#e2e8f0'},ticks:{color:'#64748b',maxTicksLimit:10,font:{size:10}}},
+      y:{grid:{color:'#e2e8f0'},ticks:{color:'#64748b',font:{size:10}}},
+    },
+  };
+}
+
+/* ─────────────────────────────────────────────────
+   API & polling
+───────────────────────────────────────────────── */
+function fillStrategySelect(profiles, active) {
+  const sel = document.getElementById('strategy-select');
+  sel.innerHTML = Object.values(profiles).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  if (active && profiles[active]) sel.value = active;
+}
+
+async function loadData() {
+  const q = selectedProfileId?`?strategy=${encodeURIComponent(selectedProfileId)}`:'';
+  const resp = await fetch(`/api/data${q}`).catch(()=>null);
+  if (!resp||!resp.ok) return;
+  const d = await resp.json();
+  if (!d) return;
+  allStocks = d.stocks||[];
+  selectedProfileId = d.profile_id||selectedProfileId;
+  buildCards(d.summary||{});
+  buildParamPanel(d);
+  // Refresh whichever left tab is active
+  if (activeLeftTab === 'picks') {
+    renderPicks();
+  } else {
+    applyFilters();
+  }
+  // Re-fill detail if a stock was selected
+  if (selectedCode) {
+    const row = allStocks.find(x=>x.code===selectedCode);
+    if (row && activeRightTab==='detail') fillDetail(row);
+  }
+}
+
+function pollStatus() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer=null; }
+  document.getElementById('loading').classList.add('show');
+  document.getElementById('load-msg').textContent='启动服务中';
+  pollTimer = setInterval(async () => {
+    const s = await fetch('/api/status').then(r=>r.json()).catch(()=>null);
+    if (!s) return;
+    if (s.active_profile_id && s.active_profile_id!==selectedProfileId) selectedProfileId=s.active_profile_id;
+    const dot = document.getElementById('status-dot');
+    dot.classList.toggle('ready', !!s.ready);
+    document.getElementById('status-text').textContent = s.message||'---';
+    if (s.latest_data_date) document.getElementById('data-date').textContent = `数据至 ${s.latest_data_date}`;
+    if (s.ready) {
+      clearInterval(pollTimer); pollTimer=null;
+      document.getElementById('loading').classList.remove('show');
+      await loadData();
+    } else {
+      document.getElementById('load-msg').textContent = s.message||'计算中';
+    }
+  }, 1200);
+}
+
+async function onStrategyChange() {
+  selectedProfileId = document.getElementById('strategy-select').value;
+  destroyCharts();
+  const readyCheck = await fetch(`/api/ready/${encodeURIComponent(selectedProfileId)}`).then(r=>r.json()).catch(()=>null);
+  if (readyCheck && readyCheck.ready) {
+    document.getElementById('loading').classList.add('show');
+    document.getElementById('load-msg').textContent='加载策略数据...';
+    await fetch(`/api/data?strategy=${encodeURIComponent(selectedProfileId)}`).catch(()=>null);
+    await loadData();
+    document.getElementById('loading').classList.remove('show');
+  } else {
+    document.getElementById('loading').classList.add('show');
+    document.getElementById('load-msg').textContent='计算策略中（首次切换需要计算）';
+    await fetch(`/api/refresh?strategy=${encodeURIComponent(selectedProfileId)}`,{method:'POST'});
+    pollStatus();
+  }
+}
+
+async function refreshCurrent() {
+  const p = selectedProfileId||document.getElementById('strategy-select').value;
+  if (!p) return;
+  await fetch(`/api/refresh?strategy=${encodeURIComponent(p)}`,{method:'POST'});
+  document.getElementById('loading').classList.add('show');
+  document.getElementById('load-msg').textContent='重新计算中';
+  pollStatus();
+}
+
+async function bootstrap() {
+  const strategies = await fetch('/api/strategies').then(r=>r.json()).catch(()=>null);
+  if (!strategies) return;
+  profileMap = strategies.profiles||{};
+  selectedProfileId = strategies.active_profile_id||Object.keys(profileMap)[0];
+  fillStrategySelect(profileMap, selectedProfileId);
+  // Init left panel: picks tab is default
+  document.getElementById('table-toolbar').style.display = 'none';
+  document.getElementById('picks-panel').style.display   = '';
+  document.getElementById('table-panel').style.display   = 'none';
+  pollStatus();
+}
+
+bootstrap();
+</script>
+</body>
+</html>

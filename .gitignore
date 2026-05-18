@@ -1,0 +1,15 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+
+# Local caches / generated databases
+*.duckdb
+*.duckdb.tmp/
+*.wal
+
+# Local CodeGraph index
+.codegraph/
+
+# Virtual environments
+.venv/
+venv/
