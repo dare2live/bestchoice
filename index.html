@@ -7,23 +7,35 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <style>
 :root {
-  --bg: #f3f5f9;
+  --bg: #f7f6f3;
   --surface: #ffffff;
-  --border: #d8dee9;
-  --text: #1f2937;
-  --muted: #6b7280;
-  --green: #22c55e;
-  --yellow: #eab308;
-  --blue: #3b82f6;
-  --red: #ef4444;
-  --gold: #d97706;
-  --green-bg: rgba(34,197,94,.12);
-  --yellow-bg: rgba(234,179,8,.12);
-  --blue-bg: rgba(59,130,246,.12);
-  --red-bg: rgba(239,68,68,.12);
-  --gray-bg: rgba(107,114,128,.10);
-  --gold-bg: rgba(217,119,6,.12);
-  --shadow: 0 2px 12px rgba(15,23,42,.06);
+  --surface-2: #fbfaf7;
+  --surface-hover: #f3f1ec;
+  --border: #e8e6e0;
+  --border-strong: #d9d6cd;
+  --text: #1f1d1a;
+  --ink-2: #4a4742;
+  --muted: #8a877f;
+  --mute-soft: #b8b5ad;
+  --accent: #2d6cdf;
+  --accent-bg: #eaf1fc;
+  --accent-border: #c8d8f3;
+  --green: #1f9e6e;
+  --yellow: #b07d10;
+  --blue: var(--accent);
+  --red: #c4302b;
+  --gold: #8b5cf6;
+  --green-bg: #e8f5ef;
+  --yellow-bg: #fbf3df;
+  --warn-soft: #fbf3df;
+  --blue-bg: var(--accent-bg);
+  --red-bg: #fbecea;
+  --gray-bg: #f3f1ec;
+  --gold-bg: #f1ecfc;
+  --shadow: 0 1px 0 rgba(20,18,14,.04);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --row-h: 36px;
   --tab-h: 44px;
 }
 
@@ -32,11 +44,18 @@ body {
   margin: 0;
   color: var(--text);
   background: var(--bg);
-  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 13px/1.5 "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei UI", system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "tnum";
   height: 100vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.mono {
+  font-family: "SF Mono", "Roboto Mono", "Menlo", monospace;
+  font-feature-settings: "tnum";
 }
 
 /* ── Topbar ─────────────────────────────────────── */
@@ -45,62 +64,103 @@ body {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   padding: 0 18px;
-  height: 52px;
+  height: 56px;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
   z-index: 20;
 }
 #topbar h1 { margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap; }
-#topbar .meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
+#topbar .meta {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#strategy-meta { max-width: 360px; }
 #topbar .gap { flex: 1; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  background: var(--text);
+  color: var(--surface);
+  font: 700 14px/1 "SF Mono", "Roboto Mono", "Menlo", monospace;
+  border-radius: 7px;
+}
+.brand-text { line-height: 1.1; }
+.brand-name { font-weight: 700; font-size: 14px; }
+.brand-sub { margin-top: 2px; font-size: 11px; color: var(--muted); }
+.strategy-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+}
+.picker-label { font-size: 12px; color: var(--muted); }
 
 #strategy-select {
-  min-width: 220px;
-  padding: 6px 10px;
+  min-width: 240px;
+  padding: 6px 28px 6px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
+  color: var(--text);
   font: inherit;
+  font-weight: 500;
 }
 .btn {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font: inherit;
   white-space: nowrap;
 }
-.btn:hover { background: #eef2ff; }
+.btn:hover { background: var(--surface-hover); border-color: var(--border-strong); }
 
 #status-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--yellow); display: inline-block; flex-shrink: 0;
 }
 #status-dot.ready { background: var(--green); }
-#status-text { font-size: 12px; color: var(--muted); }
+#status-text {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+#update-time, #data-date { max-width: 180px; }
 
 /* ── KPI Cards ───────────────────────────────────── */
 .cards-row {
   flex-shrink: 0;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 10px;
-  padding: 10px 18px 0;
+  gap: 0;
+  padding: 0 18px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 .card {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 14px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  padding: 11px 16px 12px;
+  background: transparent;
+  box-shadow: none;
 }
+.card:first-child { border-left: 1px solid var(--border); }
 .card-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 .card-value { margin-top: 2px; font-size: 22px; line-height: 1.1; font-weight: 700; }
 .card-sub { margin-top: 4px; color: var(--muted); font-size: 11px; }
-.c-green  .card-value { color: var(--green); }
+.c-green  .card-value { color: var(--red); }
 .c-yellow .card-value { color: var(--yellow); }
 .c-blue   .card-value { color: var(--blue); }
 .c-red    .card-value { color: var(--red); }
@@ -111,21 +171,21 @@ body {
 .main-layout {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 400px;
-  gap: 10px;
-  padding: 10px 18px 12px;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 12px;
+  padding: 12px 16px 16px;
   min-height: 0;
 }
 
 /* ── Panel ───────────────────────────────────────── */
 .panel {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
   background: var(--surface);
-  box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 /* ── Tab strip ───────────────────────────────────── */
@@ -134,13 +194,14 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   min-height: var(--tab-h);
 }
 .tab-btn {
-  padding: 5px 14px;
-  border-radius: 7px;
+  position: relative;
+  padding: 5px 12px;
+  border-radius: 0;
   border: 1px solid transparent;
   background: none;
   color: var(--muted);
@@ -149,11 +210,19 @@ body {
   white-space: nowrap;
   transition: background .12s, color .12s;
 }
-.tab-btn:hover { background: var(--bg); color: var(--text); }
+.tab-btn:hover { color: var(--text); }
 .tab-btn.active {
-  background: var(--blue-bg);
-  color: var(--blue);
-  border-color: rgba(59,130,246,.25);
+  background: transparent;
+  color: var(--text);
+  border-color: transparent;
+}
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 12px; right: 12px; bottom: -11px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px 2px 0 0;
 }
 .tab-sep { flex: 1; }
 
@@ -163,18 +232,19 @@ body {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
+  background: var(--surface-2);
 }
 .count-label { font-size: 12px; color: var(--muted); }
 .filter-input, .filter-select {
   border: 1px solid var(--border);
-  border-radius: 6px;
-  background: white;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   color: var(--text);
   font: inherit;
-  padding: 4px 7px;
+  padding: 5px 8px;
 }
 #global-search { flex: 1; min-width: 220px; max-width: 340px; }
 .toolbar-row {
@@ -191,7 +261,12 @@ body {
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 5px 3px 8px;
 }
+.field .filter-input, .field .filter-select { border-color: transparent; padding-block: 2px; }
 .field .filter-input { width: 76px; }
 .field .filter-select { min-width: 92px; }
 #sort-select { min-width: 118px; }
@@ -202,26 +277,28 @@ body {
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 #stock-table { min-width: 1240px; }
 th, td {
-  padding: 7px 9px;
-  border-bottom: 1px solid var(--border);
+  padding: 0 9px;
+  height: var(--row-h);
+  border-bottom: 1px solid transparent;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 thead th {
-  background: #f8fafc;
+  background: var(--surface-2);
   position: sticky; top: 0; z-index: 2;
   color: var(--muted);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: .03em;
+  border-bottom-color: var(--border);
 }
 th[data-sort] { cursor: pointer; user-select: none; }
 th[title] { cursor: help; }
 th[data-sort][title] { cursor: pointer; }
 .sort-arrow { float: right; color: var(--muted); font-size: 10px; }
-tbody tr:hover { background: #f1f5f9; }
-tbody tr.selected { background: #dbeafe; }
+tbody tr:hover { background: var(--surface-hover); }
+tbody tr.selected { background: var(--accent-bg); box-shadow: inset 3px 0 0 var(--accent); }
 td { font-size: 13px; }
 
 /* ── Badges ──────────────────────────────────────── */
@@ -233,10 +310,10 @@ td { font-size: 13px; }
 .badge-yellow { background: var(--yellow-bg); color: var(--yellow); }
 .badge-blue   { background: var(--blue-bg);   color: var(--blue); }
 .badge-red    { background: var(--red-bg);     color: var(--red); }
-.badge-gray   { background: var(--gray-bg);    color: #374151; }
+.badge-gray   { background: var(--gray-bg);    color: var(--ink-2); }
 .badge-gold   { background: var(--gold-bg);    color: var(--gold); }
-.num-pos { color: var(--green); }
-.num-neg { color: var(--red); }
+.num-pos { color: var(--red); }
+.num-neg { color: var(--green); }
 .cell-code { font-weight: 700; }
 .cell-name { color: var(--muted); font-size: 12px; }
 
@@ -260,18 +337,23 @@ td { font-size: 13px; }
 }
 .quick-chip {
   border: 1px solid var(--border);
-  background: #fbfdff;
-  color: var(--muted);
+  background: var(--surface);
+  color: var(--ink-2);
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: 5px 10px;
   cursor: pointer;
   font: 600 12px/1.2 inherit;
 }
-.quick-chip:hover { background: var(--bg); color: var(--text); }
+.quick-chip:hover { background: var(--surface-hover); color: var(--text); }
 .quick-chip.active {
-  border-color: rgba(59,130,246,.35);
+  border-color: var(--accent-border);
   background: var(--blue-bg);
   color: var(--blue);
+}
+.chip-count {
+  margin-left: 5px;
+  color: var(--muted);
+  font-weight: 600;
 }
 
 /* ── Horizon table ───────────────────────────────── */
@@ -281,7 +363,7 @@ td { font-size: 13px; }
   font-size: 12px;
 }
 .horizon-table th {
-  background: #f8fafc;
+  background: var(--surface-2);
   color: var(--muted);
   font-size: 10px;
   text-transform: uppercase;
@@ -293,10 +375,10 @@ td { font-size: 13px; }
 }
 .horizon-table td {
   padding: 5px 8px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
-.horizon-table tr.best-row td { background: #fffbeb; font-weight: 700; }
+.horizon-table tr.best-row td { background: var(--warn-soft, #fbf3df); font-weight: 700; }
 .horizon-table tr.best-row td:first-child::after { content: ' ★'; color: var(--gold); font-size: 11px; }
 
 /* ── Right panel ─────────────────────────────────── */
@@ -311,7 +393,7 @@ td { font-size: 13px; }
 }
 .param-card {
   border: 1px solid var(--border);
-  border-radius: 8px; padding: 8px 10px; background: #fbfdff;
+  border-radius: var(--radius-sm); padding: 9px 11px; background: var(--surface-2);
 }
 .param-name  { font-size: 11px; color: var(--muted); }
 .param-value { font-size: 18px; font-weight: 700; margin-top: 2px; }
@@ -320,14 +402,14 @@ td { font-size: 13px; }
 
 /* ── Detail panel ────────────────────────────────── */
 #rec-box {
-  border: 1px solid var(--border); border-radius: 8px;
-  padding: 10px; margin-bottom: 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 11px 12px; margin-bottom: 12px;
 }
-#rec-box.rec-buy  { border-color: #86efac; background: #f0fdf4; }
-#rec-box.rec-warn { border-color: #fde68a; background: #fffbeb; }
-#rec-box.rec-hold { border-color: #bfdbfe; background: #eff6ff; }
-#rec-box.rec-sell { border-color: #fecaca; background: #fef2f2; }
-#rec-box.rec-wait { border-color: var(--border); background: #f8fafc; }
+#rec-box.rec-buy  { border-color: #f0c8c5; background: #fbecea; }
+#rec-box.rec-warn { border-color: #ebd7a5; background: #fbf3df; }
+#rec-box.rec-hold { border-color: var(--accent-border); background: var(--accent-bg); }
+#rec-box.rec-sell { border-color: #c7e6d6; background: #e8f5ef; }
+#rec-box.rec-wait { border-color: var(--border); background: var(--surface-2); }
 #rec-title { font-weight: 700; font-size: 14px; }
 #rec-desc  { color: var(--muted); margin-top: 5px; font-size: 12px; }
 
@@ -338,8 +420,8 @@ td { font-size: 13px; }
 }
 .d-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .d-cell {
-  border: 1px solid var(--border); border-radius: 7px;
-  padding: 7px 9px; background: #fbfdff;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 7px 9px; background: var(--surface-2);
 }
 .d-cell-label { font-size: 11px; color: var(--muted); line-height: 1.2; }
 .d-cell-label[title] { cursor: help; text-decoration: underline dotted var(--border); text-underline-offset: 3px; }
@@ -350,8 +432,8 @@ td { font-size: 13px; }
   display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
 }
 .timing-cell {
-  border: 1px solid var(--border); border-radius: 7px;
-  padding: 7px 9px; background: #fbfdff;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 7px 9px; background: var(--surface-2);
 }
 .timing-label { font-size: 11px; color: var(--muted); }
 .timing-value { margin-top: 2px; font-size: 14px; font-weight: 600; }
@@ -359,7 +441,7 @@ td { font-size: 13px; }
 /* Score bar */
 .score-bar-wrap { margin-top: 4px; }
 .score-bar-bg { height: 5px; border-radius: 3px; background: var(--bg); margin-top: 4px; }
-.score-bar-fill { height: 5px; border-radius: 3px; background: var(--green); transition: width .3s; }
+.score-bar-fill { height: 5px; border-radius: 3px; background: var(--red); transition: width .3s; }
 
 #chart-price, #chart-macd { width: 100%; height: 140px !important; }
 #chart-wrap-macd { margin-top: 6px; }
@@ -368,7 +450,7 @@ td { font-size: 13px; }
 #loading {
   position: fixed; inset: 0;
   display: none; align-items: center; justify-content: center;
-  background: rgba(243,245,249,.92); z-index: 99;
+  background: rgba(247,246,243,.92); z-index: 99;
   flex-direction: column; gap: 10px;
 }
 #loading.show { display: flex; }
@@ -402,8 +484,17 @@ td { font-size: 13px; }
 
 <!-- Topbar -->
 <div id="topbar">
-  <h1>MACD 选股台</h1>
-  <select id="strategy-select" onchange="onStrategyChange()"></select>
+  <div class="brand">
+    <div class="brand-mark">B</div>
+    <div class="brand-text">
+      <div class="brand-name">BestChoice</div>
+      <div class="brand-sub">MACD 选股台</div>
+    </div>
+  </div>
+  <div class="strategy-picker">
+    <span class="picker-label">策略</span>
+    <select id="strategy-select" onchange="onStrategyChange()"></select>
+  </div>
   <span class="meta" id="strategy-meta"></span>
   <div class="gap"></div>
   <span id="status-dot"></span>
@@ -435,6 +526,8 @@ td { font-size: 13px; }
         <button class="quick-chip" data-qf="just" onclick="setQuickFilter('just')">刚金叉</button>
         <button class="quick-chip" data-qf="near" onclick="setQuickFilter('near')">即将金叉</button>
         <button class="quick-chip" data-qf="holding" onclick="setQuickFilter('holding')">持仓期</button>
+        <button class="quick-chip" data-qf="death" onclick="setQuickFilter('death')">刚死叉</button>
+        <button class="quick-chip" data-qf="wait" onclick="setQuickFilter('wait')">等待</button>
         <button class="quick-chip" data-qf="history" onclick="setQuickFilter('history')">历史有效</button>
       </div>
       <div class="toolbar-row">
@@ -627,10 +720,10 @@ td { font-size: 13px; }
 ───────────────────────────────────────────────── */
 const STATUS_ORDER = { '刚金叉':1,'即将金叉':2,'持仓期':3,'刚死叉':4,'等待':5 };
 const STATUS_BADGE = {
-  '刚金叉' :'<span class="badge badge-green">刚金叉</span>',
+  '刚金叉' :'<span class="badge badge-red">刚金叉</span>',
   '即将金叉':'<span class="badge badge-yellow">即将金叉</span>',
   '持仓期' :'<span class="badge badge-blue">持仓期</span>',
-  '刚死叉' :'<span class="badge badge-red">刚死叉</span>',
+  '刚死叉' :'<span class="badge badge-green">刚死叉</span>',
   '等待'   :'<span class="badge badge-gray">等待</span>',
 };
 const HISTORY_STATUS_LABELS = {
@@ -719,7 +812,7 @@ function fmtSignedPct(v, d=2, na='—') {
   return n>=0?`<span class="num-pos">+${s}</span>`:`<span class="num-neg">${s}</span>`;
 }
 function hitBadge(v) {
-  return v ? '<span style="color:var(--green);font-weight:700">是</span>'
+  return v ? '<span style="color:var(--red);font-weight:700">是</span>'
            : '<span style="color:var(--muted)">否</span>';
 }
 function histStatusCode(r) {
@@ -742,10 +835,10 @@ function recommendationLabel(r) {
 function renderRecommendationCell(r) {
   const label = recommendationLabel(r);
   if (label === '今日推荐') return '<span class="badge badge-gold">今日推荐</span>';
-  if (label === '买入窗口') return '<span class="badge badge-green">买入窗口</span>';
+  if (label === '买入窗口') return '<span class="badge badge-red">买入窗口</span>';
   if (label === '提前关注') return '<span class="badge badge-yellow">提前关注</span>';
   if (label === '持仓观察') return '<span class="badge badge-blue">持仓观察</span>';
-  if (label === '风险提示') return '<span class="badge badge-red">风险提示</span>';
+  if (label === '风险提示') return '<span class="badge badge-green">风险提示</span>';
   return '<span class="badge badge-gray">等待</span>';
 }
 
@@ -757,7 +850,7 @@ function renderSellHintCell(r) {
     return `<span style="font-size:11px;color:var(--yellow)">预计${r.days_event}天金叉</span>`;
   }
   if (r.status === '刚金叉' && r.days_event != null) {
-    return `<span style="font-size:11px;color:var(--green)">金叉${r.days_event}天</span>`;
+    return `<span style="font-size:11px;color:var(--red)">金叉${r.days_event}天</span>`;
   }
   return '—';
 }
@@ -872,6 +965,8 @@ function passQuickFilter(row) {
   if (activeQuickFilter === 'just') return row.status === '刚金叉';
   if (activeQuickFilter === 'near') return row.status === '即将金叉';
   if (activeQuickFilter === 'holding') return row.status === '持仓期';
+  if (activeQuickFilter === 'death') return row.status === '刚死叉';
+  if (activeQuickFilter === 'wait') return row.status === '等待';
   if (activeQuickFilter === 'history') return histStatusCode(row) === 'ok';
   return true;
 }
@@ -959,15 +1054,32 @@ function setQuickFilter(name) {
 
 function updateListHint() {
   const counts = {
+    all: allStocks.length,
     today: allStocks.filter(s=>s.is_buy_point).length,
     just: allStocks.filter(s=>s.status==='刚金叉').length,
     near: allStocks.filter(s=>s.status==='即将金叉').length,
     holding: allStocks.filter(s=>s.status==='持仓期').length,
+    death: allStocks.filter(s=>s.status==='刚死叉').length,
+    wait: allStocks.filter(s=>s.status==='等待').length,
     history: allStocks.filter(s=>histStatusCode(s)==='ok').length,
   };
+  const labels = {
+    all: '全部',
+    today: '今日推荐',
+    just: '刚金叉',
+    near: '即将金叉',
+    holding: '持仓期',
+    death: '刚死叉',
+    wait: '等待',
+    history: '历史有效',
+  };
+  document.querySelectorAll('[data-qf]').forEach(btn => {
+    const key = btn.dataset.qf;
+    if (labels[key]) btn.innerHTML = `${labels[key]} <span class="chip-count mono">${counts[key] ?? 0}</span>`;
+  });
   const hint = activeQuickFilter === 'today' && counts.today === 0
     ? '今日推荐为 0：当前没有同时满足金叉、量价过滤、历史胜率和Calmar阈值的股票'
-    : `今日推荐 ${counts.today} · 刚金叉 ${counts.just} · 即将金叉 ${counts.near} · 持仓期 ${counts.holding} · 历史有效 ${counts.history}`;
+    : `今日推荐 ${counts.today} · 刚金叉 ${counts.just} · 即将金叉 ${counts.near} · 持仓期 ${counts.holding} · 刚死叉 ${counts.death} · 历史有效 ${counts.history}`;
   document.getElementById('list-hint').textContent = hint;
 }
 
@@ -1117,7 +1229,7 @@ function fillDetail(row) {
   document.getElementById('d-score').textContent = `${score} 分`;
   document.getElementById('d-score-bar').style.width = Math.min(score, 100) + '%';
   const barEl = document.getElementById('d-score-bar');
-  barEl.style.background = score>=60 ? 'var(--green)' : score>=35 ? 'var(--yellow)' : 'var(--muted)';
+  barEl.style.background = score>=60 ? 'var(--red)' : score>=35 ? 'var(--yellow)' : 'var(--muted)';
 
   // 持仓期分析
   fillHorizonTable(row);
