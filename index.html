@@ -161,14 +161,14 @@ body {
 .toolbar {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
 .count-label { font-size: 12px; color: var(--muted); }
-.filter-input, .filter-select, .num-op {
+.filter-input, .filter-select {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: white;
@@ -176,10 +176,26 @@ body {
   font: inherit;
   padding: 4px 7px;
 }
-#global-search { flex: 1; min-width: 180px; max-width: 300px; }
-.filter-number { display: grid; grid-template-columns: 52px 1fr; gap: 3px; }
-.filter-number .num-op { padding: 4px 4px; font-size: 11px; }
-.filter-number .filter-input { min-width: 0; }
+#global-search { flex: 1; min-width: 220px; max-width: 340px; }
+.toolbar-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.field {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.field .filter-input { width: 76px; }
+.field .filter-select { min-width: 92px; }
+#sort-select { min-width: 118px; }
+#sort-dir { min-width: 58px; padding-inline: 8px; }
 
 /* ── Table ───────────────────────────────────────── */
 .table-wrap { flex: 1; overflow: auto; min-height: 0; }
@@ -199,11 +215,6 @@ thead th {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: .03em;
-}
-.filter-row th {
-  background: #fbfdff;
-  position: sticky; top: 35px; z-index: 1;
-  padding: 4px 6px;
 }
 th[data-sort] { cursor: pointer; user-select: none; }
 th[title] { cursor: help; }
@@ -418,7 +429,7 @@ td { font-size: 13px; }
     </div>
 
     <div class="toolbar" id="table-toolbar">
-      <div class="quick-filters" id="quick-filters">
+      <div class="toolbar-row quick-filters" id="quick-filters">
         <button class="quick-chip active" data-qf="all" onclick="setQuickFilter('all')">全部</button>
         <button class="quick-chip" data-qf="today" onclick="setQuickFilter('today')">今日推荐</button>
         <button class="quick-chip" data-qf="just" onclick="setQuickFilter('just')">刚金叉</button>
@@ -426,15 +437,49 @@ td { font-size: 13px; }
         <button class="quick-chip" data-qf="holding" onclick="setQuickFilter('holding')">持仓期</button>
         <button class="quick-chip" data-qf="history" onclick="setQuickFilter('history')">历史有效</button>
       </div>
-      <input id="global-search" class="filter-input" placeholder="搜索 代码/名称/行业/风格" oninput="applyFilters()">
-      <button class="btn" onclick="resetFilters()">清空筛选</button>
+      <div class="toolbar-row">
+        <input id="global-search" class="filter-input" placeholder="搜索 代码/名称/行业/风格" oninput="applyFilters()">
+        <label class="field">状态
+          <select id="status-filter" class="filter-select" onchange="applyFilters()">
+            <option value="">全部</option><option>刚金叉</option><option>即将金叉</option><option>持仓期</option><option>刚死叉</option><option>等待</option>
+          </select>
+        </label>
+        <label class="field">历史
+          <select id="history-filter" class="filter-select" onchange="applyFilters()">
+            <option value="">全部</option><option value="ok">历史有效</option><option value="insufficient_history">历史样本不足</option><option value="no_signal">无有效信号</option><option value="too_few_signals">信号不足</option><option value="none">无历史</option>
+          </select>
+        </label>
+        <label class="field">胜率≥
+          <input id="min-win-filter" class="filter-input" type="number" step="0.01" placeholder="%" oninput="applyFilters()">
+        </label>
+        <label class="field">收益≥
+          <input id="min-ret-filter" class="filter-input" type="number" step="0.01" placeholder="%" oninput="applyFilters()">
+        </label>
+        <label class="field">Calmar≥
+          <input id="min-calmar-filter" class="filter-input" type="number" step="0.01" oninput="applyFilters()">
+        </label>
+        <label class="field">排序
+          <select id="sort-select" class="filter-select" onchange="setSortKey(this.value, true)">
+            <option value="recommendation">建议</option>
+            <option value="status">状态</option>
+            <option value="trade_ref_ret">验证收益</option>
+            <option value="win_rate">胜率</option>
+            <option value="avg_ret">均收益</option>
+            <option value="avg_dd">均回撤</option>
+            <option value="calmar">Calmar</option>
+            <option value="signal_count">信号数</option>
+            <option value="trade_ref_holding_days">周期</option>
+          </select>
+        </label>
+        <button class="btn" id="sort-dir" onclick="toggleSortDir()">升序</button>
+        <button class="btn" onclick="resetFilters()">清空筛选</button>
+      </div>
     </div>
 
     <div class="table-wrap" id="table-panel">
       <table id="stock-table">
         <thead>
           <tr id="header-row"></tr>
-          <tr id="filter-row" class="filter-row"></tr>
         </thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -784,7 +829,6 @@ function renderHeader() {
   const cols = getCols();
   const sort = getSort();
   const hRow = document.getElementById('header-row');
-  const fRow = document.getElementById('filter-row');
 
   hRow.innerHTML = cols.map(c => {
     const isActive = c.key === sort.key;
@@ -794,60 +838,24 @@ function renderHeader() {
     const help = METRIC_HELP[c.key];
     const tip  = help ? [help.desc, help.high&&'偏高：'+help.high, help.low&&'偏低：'+help.low].filter(Boolean).join('\n') : '';
     const ta   = tip ? ` title="${tip.replace(/"/g,'&quot;')}"` : '';
-    return `<th data-sort="${c.key}" style="min-width:${c.width}px;width:${c.width}px"${ta}>${c.label}${arrow}</th>`;
+    return `<th data-sort="${c.key}" onclick="setSortKey('${c.key}')" style="min-width:${c.width}px;width:${c.width}px"${ta}>${c.label}${arrow}</th>`;
   }).join('');
-
-  fRow.innerHTML = cols.map(c => {
-    if (c.filterType==='select') {
-      const opts = (c.options&&c.options()) || [''];
-      return `<th><select class="filter-select" data-fkey="${c.key}" onchange="applyFilters()">${opts.map(v=>`<option value="${v}">${v||'全部'}</option>`).join('')}</select></th>`;
-    }
-    if (c.filterType==='bool') {
-      return `<th><select class="filter-select" data-fkey="${c.key}" onchange="applyFilters()"><option value="">全部</option><option value="1">是</option><option value="0">否</option></select></th>`;
-    }
-    if (c.filterType==='number') {
-      return `<th><div class="filter-number"><select class="num-op" data-fkey="${c.key}" data-part="op" onchange="applyFilters()"><option value="">—</option><option value=">=">≥</option><option value="<=">≤</option><option value=">">></option><option value="<"><</option><option value="==">=</option></select><input type="number" step="any" class="filter-input" data-fkey="${c.key}" data-part="val" oninput="applyFilters()"></div></th>`;
-    }
-    // text (including sell_hint_display pseudo-col)
-    return `<th><input class="filter-input" data-fkey="${c.key}" oninput="applyFilters()" placeholder="${c.label}"></th>`;
-  }).join('');
-
-  hRow.querySelectorAll('th[data-sort]').forEach(th => {
-    th.addEventListener('click', () => {
-      const key = th.dataset.sort;
-      const s = getSort();
-      if (s.key===key) tableSort.dir = -s.dir;
-      else tableSort = {key, dir:1};
-      renderTable();
-      document.querySelectorAll('#header-row th[data-sort] .sort-arrow').forEach(a => {
-        const k = a.closest('th').dataset.sort;
-        const ns = getSort();
-        a.textContent = k===ns.key ? (ns.dir>0?'↑':'↓') : '⇅';
-      });
-    });
-  });
-}
-
-function fkey(k, part) {
-  return part
-    ? document.querySelector(`[data-fkey="${k}"][data-part="${part}"]`)
-    : document.querySelector(`[data-fkey="${k}"]`);
+  syncSortControls();
 }
 
 function readFilters() {
-  const out = {};
-  for (const c of getCols()) {
-    const f = {type:c.filterType, filterScale:c.filterScale||1};
-    if (c.filterType==='number') {
-      f.op  = (fkey(c.key,'op')||{}).value||'';
-      f.val = (fkey(c.key,'val')||{}).value?.trim()||'';
-    } else {
-      f.val = (fkey(c.key)||{}).value?.trim()||'';
-    }
-    out[c.key] = f;
-  }
-  out._global = (document.getElementById('global-search').value||'').trim().toLowerCase();
-  return out;
+  const numOrNull = id => {
+    const raw = document.getElementById(id).value;
+    return raw === '' ? null : Number(raw);
+  };
+  return {
+    global: (document.getElementById('global-search').value||'').trim().toLowerCase(),
+    status: document.getElementById('status-filter').value || '',
+    history: document.getElementById('history-filter').value || '',
+    minWin: numOrNull('min-win-filter'),
+    minRet: numOrNull('min-ret-filter'),
+    minCalmar: numOrNull('min-calmar-filter'),
+  };
 }
 
 function getCellVal(row, key) {
@@ -870,44 +878,15 @@ function passQuickFilter(row) {
 
 function passFilter(row, filters) {
   if (!passQuickFilter(row)) return false;
-  const g = filters._global;
-  if (g) {
+  if (filters.global) {
     const hay = `${row.code||''} ${row.name||''} ${row.industry||''} ${row.archetype||''}`.toLowerCase();
-    if (!hay.includes(g)) return false;
+    if (!hay.includes(filters.global)) return false;
   }
-  for (const c of getCols()) {
-    const cfg = filters[c.key];
-    const val = getCellVal(row, c.key);
-
-    if (cfg.type==='text') {
-      if (cfg.val && String(val||'').toLowerCase().indexOf(cfg.val.toLowerCase())===-1) return false;
-      continue;
-    }
-    if (cfg.type==='select') {
-      if (c.key==='history_status') {
-        if (cfg.val && histStatusText(row)!==cfg.val) return false;
-        continue;
-      }
-      if (cfg.val && String(val||'')!==cfg.val) return false;
-      continue;
-    }
-    if (cfg.type==='bool') {
-      if (!cfg.val) continue;
-      if (Boolean(val)!==(cfg.val==='1')) return false;
-      continue;
-    }
-    if (cfg.type==='number') {
-      if (!cfg.val||!cfg.op) continue;
-      const n = Number(val);
-      const target = Number(cfg.val) / cfg.filterScale;
-      if (!Number.isFinite(n)||!Number.isFinite(target)) { if(cfg.op) return false; continue; }
-      if (cfg.op==='>='&&!(n>=target)) return false;
-      if (cfg.op==='<='&&!(n<=target)) return false;
-      if (cfg.op==='>'&&!(n>target))   return false;
-      if (cfg.op==='<'&&!(n<target))   return false;
-      if (cfg.op==='=='&&!(n===target)) return false;
-    }
-  }
+  if (filters.status && row.status !== filters.status) return false;
+  if (filters.history && histStatusCode(row) !== filters.history) return false;
+  if (filters.minWin != null && Number.isFinite(filters.minWin) && !(Number(row.win_rate) >= filters.minWin / 100)) return false;
+  if (filters.minRet != null && Number.isFinite(filters.minRet) && !(Number(row.avg_ret) >= filters.minRet / 100)) return false;
+  if (filters.minCalmar != null && Number.isFinite(filters.minCalmar) && !(Number(row.calmar) >= filters.minCalmar)) return false;
   return true;
 }
 
@@ -937,8 +916,39 @@ function applyFilters() {
   filtered = allStocks.filter(r=>passFilter(r,filters));
   filtered.sort(comparator);
   updateListHint();
+  syncSortControls();
   document.getElementById('count-label').textContent = `显示 ${filtered.length} / ${allStocks.length} 条`;
   renderTable();
+}
+
+function setSortKey(key, fromSelect=false) {
+  if (!key) return;
+  if (tableSort.key === key && !fromSelect) {
+    tableSort.dir = -tableSort.dir;
+  } else {
+    tableSort = { key, dir: defaultSortDir(key) };
+  }
+  applyFilters();
+}
+
+function defaultSortDir(key) {
+  return ['trade_ref_ret','win_rate','avg_ret','calmar','signal_count'].includes(key) ? -1 : 1;
+}
+
+function toggleSortDir() {
+  tableSort.dir = -tableSort.dir;
+  applyFilters();
+}
+
+function syncSortControls() {
+  const sortSelect = document.getElementById('sort-select');
+  const sortDir = document.getElementById('sort-dir');
+  if (sortSelect) sortSelect.value = tableSort.key;
+  if (sortDir) sortDir.textContent = tableSort.dir > 0 ? '升序' : '降序';
+  document.querySelectorAll('#header-row th[data-sort] .sort-arrow').forEach(a => {
+    const k = a.closest('th').dataset.sort;
+    a.textContent = k===tableSort.key ? (tableSort.dir>0?'↑':'↓') : '⇅';
+  });
 }
 
 function setQuickFilter(name) {
@@ -1000,15 +1010,13 @@ function renderCell(c, row) {
 function resetFilters() {
   activeQuickFilter = 'all';
   document.querySelectorAll('[data-qf]').forEach(b => b.classList.toggle('active', b.dataset.qf==='all'));
-  getCols().forEach(c => {
-    if (c.filterType==='number') {
-      const op=fkey(c.key,'op'); const vl=fkey(c.key,'val');
-      if(op) op.value=''; if(vl) vl.value='';
-    } else {
-      const el=fkey(c.key); if(el) el.value='';
-    }
-  });
   document.getElementById('global-search').value='';
+  document.getElementById('status-filter').value='';
+  document.getElementById('history-filter').value='';
+  document.getElementById('min-win-filter').value='';
+  document.getElementById('min-ret-filter').value='';
+  document.getElementById('min-calmar-filter').value='';
+  tableSort = { key:'recommendation', dir:1 };
   applyFilters();
 }
 
