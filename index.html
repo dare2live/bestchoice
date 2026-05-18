@@ -114,10 +114,10 @@ body {
   border-right: 1px solid var(--border);
   background: transparent;
   color: var(--muted);
-  flex: 1 0 210px;
-  padding: 14px 20px;
+  flex: 1 1 120px;
+  min-width: 118px;
+  padding: 10px 12px 9px;
   cursor: pointer;
-  font: 600 13px/1.2 inherit;
   text-align: center;
   white-space: nowrap;
 }
@@ -127,6 +127,23 @@ body {
   background: var(--surface);
   box-shadow: inset 0 -2px 0 var(--text);
 }
+.strategy-tab-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.strategy-tab-param {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font: 500 11px/1.2 "JetBrains Mono", "SF Mono", "Roboto Mono", "Menlo", monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.strategy-tab.active .strategy-tab-param { color: var(--ink-2); }
 .strategy-param-strip {
   display: flex;
   align-items: center;
@@ -205,24 +222,33 @@ body {
 .cards-row {
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
-  padding: 0 18px;
+  padding: 0;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  width: 100%;
+  min-width: 0;
 }
 .card {
   border: 0;
   border-right: 1px solid var(--border);
   border-radius: 0;
-  padding: 11px 16px 12px;
+  padding: 10px 14px 11px;
   background: transparent;
   box-shadow: none;
+  min-width: 0;
 }
-.card:first-child { border-left: 1px solid var(--border); }
 .card-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 .card-value { margin-top: 2px; font-size: 22px; line-height: 1.1; font-weight: 700; }
-.card-sub { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.card-sub {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .c-green  .card-value { color: var(--red); }
 .c-yellow .card-value { color: var(--yellow); }
 .c-blue   .card-value { color: var(--blue); }
@@ -531,7 +557,7 @@ td:nth-child(n+5),
   .param-detail-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 900px) {
-  .cards-row   { grid-template-columns: repeat(3, 1fr); }
+  .cards-row   { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .main-layout { padding: 8px 10px; }
 }
 </style>
@@ -1434,19 +1460,24 @@ function strategyTabLabel(profile) {
   const fast = profile.macd_fast ?? profile.fast ?? '-';
   const slow = profile.macd_slow ?? profile.slow ?? '-';
   const signal = profile.macd_signal ?? profile.signal ?? '-';
-  if (name.includes('通达信参数')) return `通达信参数 · EMA(${fast},${slow},${signal})`;
-  if (name.includes('基准策略')) return `基准策略 · EMA(${fast},${slow},${signal})`;
-  if (name.includes('Optuna')) return `Optuna 最优 · EMA(${fast}/${slow}/${signal})`;
+  const param = `EMA(${fast},${slow},${signal})`;
+  if (name.includes('通达信参数')) return {name:'通达信', param};
+  if (name.includes('基准策略')) return {name:'基准', param};
+  if (name.includes('Optuna')) return {name:'Optuna', param};
   if (name.includes('参数组')) {
     const m = name.match(/参数组\s*([A-Z])/);
-    return `参数组 ${m ? m[1] : ''} · EMA(${fast},${slow},${signal})`;
+    return {name:`参数组 ${m ? m[1] : ''}`.trim(), param};
   }
-  return name;
+  if (name.includes('公式策略')) {
+    const label = name.includes('任一') ? '任一' : name.replace('公式策略 · ', '').replace(' 命中', '');
+    return {name:`公式 ${label}`, param};
+  }
+  return {name, param};
 }
 
 function orderedProfiles(profiles) {
   const all = Object.values(profiles || {});
-  const preferred = ['tdx_12_26_9', 'macd_12_26_9', 'macd_10_22_8_h15', 'optuna_best', 'macd_14_30_11'];
+  const preferred = ['tdx_12_26_9', 'macd_12_26_9', 'macd_10_22_8_h15', 'optuna_best', 'macd_14_30_11', 'macd_10_22_8'];
   const first = preferred.map(id => all.find(p => p.id === id)).filter(Boolean);
   const rest = all.filter(p => !preferred.includes(p.id));
   return [...first, ...rest];
@@ -1457,7 +1488,8 @@ function renderStrategyTabs(profiles, active) {
   if (!wrap) return;
   wrap.innerHTML = orderedProfiles(profiles).map(p => {
     const isActive = p.id === active;
-    return `<button class="strategy-tab ${isActive?'active':''}" data-strategy="${p.id}" onclick="selectStrategy('${p.id}')">${strategyTabLabel(p)}</button>`;
+    const label = strategyTabLabel(p);
+    return `<button class="strategy-tab ${isActive?'active':''}" data-strategy="${p.id}" onclick="selectStrategy('${p.id}')"><span class="strategy-tab-name">${label.name}</span><span class="strategy-tab-param">${label.param}</span></button>`;
   }).join('');
 }
 
